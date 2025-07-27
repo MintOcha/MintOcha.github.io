@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fixed Video Motion Detection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            background: linear-gradient(to right, #4facfe, #00f2fe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+        .content {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        .upload-section {
+            flex: 1;
+            min-width: 300px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        .controls-section {
+            flex: 1;
+            min-width: 300px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        .section-title {
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #00f2fe;
+        }
+        .upload-area {
+            border: 3px dashed #00f2fe;
+            border-radius: 10px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        .upload-area:hover {
+            background: rgba(0, 242, 254, 0.1);
+            transform: translateY(-3px);
+        }
+        .upload-icon {
+            font-size: 4rem;
+            margin-bottom: 15px;
+            color: #00f2fe;
+        }
+        .upload-text {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+        }
+        .file-input {
+            display: none;
+        }
+        .btn {
+            background: linear-gradient(to right, #00c6ff, #0072ff);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 1.1rem;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0, 114, 255, 0.4);
+            width: 100%;
+        }
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 114, 255, 0.6);
+        }
+        .btn:active {
+            transform: translateY(1px);
+        }
+        .btn:disabled {
+            background: #616161;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .slider-container {
+            margin-bottom: 25px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+        }
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 1.1rem;
+        }
+        .slider-value {
+            font-weight: bold;
+            color: #00f2fe;
+        }
+        .slider {
+            width: 100%;
+            height: 12px;
+            -webkit-appearance: none;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            outline: none;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: #00f2fe;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.8);
+        }
+        .video-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .video-wrapper {
+            flex: 1;
+            min-width: 300px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        .video-title {
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            color: #00f2fe;
+        }
+        video, canvas {
+            width: 100%;
+            border-radius: 10px;
+            background: black;
+        }
+        .processing-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            font-size: 1.1rem;
+        }
+        .status {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .status-indicator {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        .status-processing {
+            background: #ff9800;
+            box-shadow: 0 0 10px #ff9800;
+        }
+        .status-ready {
+            background: #4caf50;
+            box-shadow: 0 0 10px #4caf50;
+        }
+        .status-idle {
+            background: #9e9e9e;
+        }
+        .performance-stats {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 15px;
+            font-size: 0.9rem;
+            color: #aaa;
+        }
+        .stat {
+            text-align: center;
+        }
+        .stat-value {
+            font-weight: bold;
+            color: #00f2fe;
+            font-size: 1.1rem;
+        }
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            padding: 20px;
+            font-size: 1rem;
+            opacity: 0.8;
+        }
+        .advanced-controls {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        .advanced-title {
+            text-align: center;
+            margin-bottom: 15px;
+            color: #00f2fe;
+        }
+        .persistence-controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .persistence-btn {
+            flex: 1;
+            padding: 10px;
+            background: rgba(0, 242, 254, 0.2);
+            border: 1px solid #00f2fe;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .persistence-btn.active {
+            background: rgba(0, 242, 254, 0.5);
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.7);
+        }
+        /* Channel Controls Styling */
+        .channel-controls {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        .channel-controls h4 {
+            text-align: center;
+            margin-top: 0px;
+            margin-bottom: 10px;
+            color: #00f2fe;
+        }
+        .channel-controls label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            padding: 5px;
+        }
+        .channel-controls input[type="checkbox"] {
+            margin-right: 5px;
+        }
+        @media (max-width: 768px) {
+            .content {
+                flex-direction: column;
+            }
+            h1 {
+                font-size: 2.2rem;
+            }
+            .persistence-controls {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Fixed Video Motion Detection</h1>
+            <p class="subtitle">Detect tiny movements with proper image differencing. Light grayscale background with high-contrast motion overlay. Synchronized playback with rewind support.</p>
+        </header>
+        <div class="content">
+            <div class="upload-section">
+                <h2 class="section-title">Upload Video</h2>
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📁</div>
+                    <p class="upload-text">Drag & drop your video here or click to browse</p>
+                    <button class="btn" id="browseBtn">Browse Files</button>
+                    <input type="file" id="fileInput" class="file-input" accept="video/*">
+                </div>
+                <div class="processing-info">
+                    <p>Supported formats: MP4, WebM, OGV</p>
+                    <div class="status">
+                        <div class="status-indicator status-idle" id="statusIndicator"></div>
+                        <span id="statusText">Ready to upload</span>
+                    </div>
+                    <div class="performance-stats">
+                        <div class="stat">
+                            <div>Frame Rate</div>
+                            <div class="stat-value" id="fpsValue">0 FPS</div>
+                        </div>
+                        <div class="stat">
+                            <div>Processing</div>
+                            <div class="stat-value" id="processingTime">0ms</div>
+                        </div>
+                        <div class="stat">
+                            <div>Resolution</div>
+                            <div class="stat-value" id="resolution">0x0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="controls-section">
+                <h2 class="section-title">Detection Controls</h2>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Sensitivity:</span>
+                        <span class="slider-value" id="sensitivityValue">50%</span>
+                    </div>
+                    <input type="range" min="1" max="100" value="50" class="slider" id="sensitivitySlider">
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Threshold:</span>
+                        <span class="slider-value" id="thresholdValue">20</span>
+                    </div>
+                    <input type="range" min="1" max="100" value="20" class="slider" id="thresholdSlider">
+                </div>
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Motion Persistence:</span>
+                        <span class="slider-value" id="persistenceValue">5 frames</span>
+                    </div>
+                    <input type="range" min="1" max="30" value="5" class="slider" id="persistenceSlider">
+                </div>
+                <div class="advanced-controls">
+                    <h3 class="advanced-title">Display Options</h3>
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>Background Brightness:</span>
+                            <span class="slider-value" id="brightnessValue">20%</span>
+                        </div>
+                        <input type="range" min="1" max="100" value="20" class="slider" id="brightnessSlider">
+                    </div>
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>Motion Intensity:</span>
+                            <span class="slider-value" id="intensityValue">100%</span>
+                        </div>
+                        <input type="range" min="1" max="200" value="100" class="slider" id="intensitySlider">
+                    </div>
+                    <div class="persistence-controls">
+                        <div class="persistence-btn active" id="persistBtn">Persistent Motion</div>
+                        <div class="persistence-btn" id="fadeBtn">Fade Effect</div>
+                    </div>
+                     <!-- Channel Controls Section -->
+                    <div class="channel-controls">
+                        <h4>Motion Channels</h4>
+                        <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 5px;">
+                            <label>
+                                <input type="checkbox" id="channelRed" checked> R
+                            </label>
+                            <label>
+                                <input type="checkbox" id="channelGreen" checked> G
+                            </label>
+                            <label>
+                                <input type="checkbox" id="channelBlue" checked> B
+                            </label>
+                            <label>
+                                <input type="checkbox" id="channelAlpha" checked> A
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn" id="processBtn" disabled>Process Video</button>
+            </div>
+        </div>
+        <div class="video-container">
+            <div class="video-wrapper">
+                <h3 class="video-title">Original Video</h3>
+                <video id="originalVideo" controls></video>
+            </div>
+            <div class="video-wrapper">
+                <h3 class="video-title">Motion Detection</h3>
+                <canvas id="motionCanvas"></canvas>
+            </div>
+        </div>
+        <footer>
+            <p>Fixed Video Motion Detection System | Proper Image Differencing</p>
+        </footer>
+    </div>
+    <script>
+        // DOM Elements
+        const fileInput = document.getElementById('fileInput');
+        const browseBtn = document.getElementById('browseBtn');
+        const uploadArea = document.getElementById('uploadArea');
+        const processBtn = document.getElementById('processBtn');
+        const originalVideo = document.getElementById('originalVideo');
+        const motionCanvas = document.getElementById('motionCanvas');
+        const ctx = motionCanvas.getContext('2d');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        const fpsValue = document.getElementById('fpsValue');
+        const processingTime = document.getElementById('processingTime');
+        const resolution = document.getElementById('resolution');
+        // Slider elements
+        const sensitivitySlider = document.getElementById('sensitivitySlider');
+        const thresholdSlider = document.getElementById('thresholdSlider');
+        const persistenceSlider = document.getElementById('persistenceSlider');
+        const brightnessSlider = document.getElementById('brightnessSlider');
+        const intensitySlider = document.getElementById('intensitySlider');
+        const sensitivityValue = document.getElementById('sensitivityValue');
+        const thresholdValue = document.getElementById('thresholdValue');
+        const persistenceValue = document.getElementById('persistenceValue');
+        const brightnessValue = document.getElementById('brightnessValue');
+        const intensityValue = document.getElementById('intensityValue');
+        // Persistence buttons
+        const persistBtn = document.getElementById('persistBtn');
+        const fadeBtn = document.getElementById('fadeBtn');
+        // Channel selection checkboxes
+        const channelRedCheckbox = document.getElementById('channelRed');
+        const channelGreenCheckbox = document.getElementById('channelGreen');
+        const channelBlueCheckbox = document.getElementById('channelBlue');
+        const channelAlphaCheckbox = document.getElementById('channelAlpha');
+        // State variables
+        let videoFile = null;
+        let isProcessing = false;
+        let animationFrameId = null;
+        let lastFrame = null;
+        let frameCount = 0;
+        let lastTime = 0;
+        let fps = 0;
+        let processingStartTime = 0;
+        let persistenceBuffer = [];
+        let persistenceFrames = 5;
+        let fadeEffect = false;
+        // Update slider value displays
+        sensitivitySlider.addEventListener('input', () => {
+            sensitivityValue.textContent = `${sensitivitySlider.value}%`;
+        });
+        thresholdSlider.addEventListener('input', () => {
+            thresholdValue.textContent = thresholdSlider.value;
+        });
+        persistenceSlider.addEventListener('input', () => {
+            persistenceValue.textContent = `${persistenceSlider.value} frames`;
+            persistenceFrames = parseInt(persistenceSlider.value);
+        });
+        brightnessSlider.addEventListener('input', () => {
+            brightnessValue.textContent = `${brightnessSlider.value}%`;
+        });
+        intensitySlider.addEventListener('input', () => {
+            intensityValue.textContent = `${intensitySlider.value}%`;
+        });
+        // Persistence mode buttons
+        persistBtn.addEventListener('click', () => {
+            persistBtn.classList.add('active');
+            fadeBtn.classList.remove('active');
+            fadeEffect = false;
+        });
+        fadeBtn.addEventListener('click', () => {
+            fadeBtn.classList.add('active');
+            persistBtn.classList.remove('active');
+            fadeEffect = true;
+        });
+        // Event Listeners
+        browseBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.background = 'rgba(0, 242, 254, 0.2)';
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.background = 'rgba(0, 0, 0, 0.2)';
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.background = 'rgba(0, 0, 0, 0.2)';
+            if (e.dataTransfer.files.length) {
+                handleFileUpload(e.dataTransfer.files[0]);
+            }
+        });
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFileUpload(e.target.files[0]);
+            }
+        });
+        processBtn.addEventListener('click', toggleProcessing);
+        // Handle file upload
+        function handleFileUpload(file) {
+            if (!file.type.startsWith('video/')) {
+                alert('Please upload a valid video file (MP4, WebM, OGV)');
+                return;
+            }
+            videoFile = file;
+            processBtn.disabled = false;
+            // Display video
+            const videoURL = URL.createObjectURL(file);
+            originalVideo.src = videoURL;
+            // Set status
+            statusIndicator.className = 'status-indicator status-ready';
+            statusText.textContent = 'Video uploaded. Ready to process.';
+        }
+        // Toggle video processing
+        function toggleProcessing() {
+            if (!videoFile) return;
+            if (isProcessing) {
+                stopProcessing();
+            } else {
+                startProcessing();
+            }
+        }
+        // Start video processing
+        function startProcessing() {
+            if (isProcessing) return;
+            isProcessing = true;
+            processBtn.textContent = 'Stop Processing';
+            // Set status
+            statusIndicator.className = 'status-indicator status-processing';
+            statusText.textContent = 'Processing video...';
+            // Reset counters
+            frameCount = 0;
+            lastTime = performance.now();
+            fps = 0;
+            persistenceBuffer = [];
+            // Update resolution display
+            resolution.textContent = `${originalVideo.videoWidth}x${originalVideo.videoHeight}`;
+            // Start video playback
+            originalVideo.play();
+            // Start motion detection
+            detectMotion();
+        }
+        // Stop processing
+        function stopProcessing() {
+            isProcessing = false;
+            processBtn.textContent = 'Process Video';
+            // Set status
+            statusIndicator.className = 'status-indicator status-ready';
+            statusText.textContent = 'Processing stopped. Upload another video to process.';
+            // Clear animation frame
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            // Reset frame counter
+            frameCount = 0;
+        }
+        // Motion detection with persistence tracking
+        function detectMotion() {
+            if (!isProcessing) return;
+            processingStartTime = performance.now();
+
+            // Set canvas dimensions
+            motionCanvas.width = originalVideo.videoWidth;
+            motionCanvas.height = originalVideo.videoHeight;
+
+            // Draw current frame to canvas
+            ctx.drawImage(originalVideo, 0, 0, motionCanvas.width, motionCanvas.height);
+
+            // Get image data
+            const currentFrame = ctx.getImageData(0, 0, motionCanvas.width, motionCanvas.height);
+            const currentData = currentFrame.data;
+
+            // Create light grayscale background using weighted average
+            const brightness = parseInt(brightnessSlider.value) / 100;
+            for (let i = 0; i < currentData.length; i += 4) {
+                const gray = 0.299 * currentData[i] + 0.587 * currentData[i + 1] + 0.114 * currentData[i + 2];
+                const displayGray = gray * brightness;
+                currentData[i] = displayGray;     // Red
+                currentData[i + 1] = displayGray; // Green
+                currentData[i + 2] = displayGray; // Blue
+                // Alpha (currentData[i+3]) remains unchanged
+            }
+
+            // If we have a previous frame, perform differencing
+            if (lastFrame) {
+                const lastData = lastFrame.data;
+                const motionData = new Uint8ClampedArray(currentData.length);
+
+                // Get slider values
+                const sensitivity = parseInt(sensitivitySlider.value) / 100;
+                const threshold = parseInt(thresholdSlider.value);
+                const intensity = parseInt(intensitySlider.value) / 100;
+
+                // Get channel selections
+                const useR = channelRedCheckbox.checked;
+                const useG = channelGreenCheckbox.checked;
+                const useB = channelBlueCheckbox.checked;
+                const useA = channelAlphaCheckbox.checked;
+
+                // Perform image differencing
+                for (let i = 0; i < currentData.length; i += 4) {
+                    // Calculate absolute difference for each channel
+                    const diffR = Math.abs(currentData[i] - lastData[i]);
+                    const diffG = Math.abs(currentData[i + 1] - lastData[i + 1]);
+                    const diffB = Math.abs(currentData[i + 2] - lastData[i + 2]);
+
+                    // Calculate weighted grayscale difference for sensitivity/threshold
+                    const diff = 0.299 * diffR + 0.587 * diffG + 0.114 * diffB;
+
+                    // Apply sensitivity and threshold
+                    if (diff * sensitivity > threshold) {
+                        // --- Improved Motion Color ---
+                        // Define base motion color (Cyan: R=0, G=255, B=255)
+                        let motionR = 0;
+                        let motionG = 255;
+                        let motionB = 255;
+                        let motionA = 255; // Default alpha to fully opaque for visibility
+
+                        // Apply user intensity setting
+                        motionR = Math.min(255, motionR * intensity);
+                        motionG = Math.min(255, motionG * intensity);
+                        motionB = Math.min(255, motionB * intensity);
+                        // Alpha intensity usually means fully opaque if motion, transparent if not.
+                        // We'll keep alpha at 255 if motion is detected, unless user unchecks A.
+                        // If user wants intensity to affect alpha, we could do: motionA = Math.min(255, motionA * intensity);
+
+                        // Store motion data based on selected channels
+                        motionData[i]     = useR ? motionR : 0; // Red
+                        motionData[i + 1] = useG ? motionG : 0; // Green
+                        motionData[i + 2] = useB ? motionB : 0; // Blue
+                        motionData[i + 3] = useA ? motionA : 0; // Alpha
+                    } else {
+                        // No motion - set all channels to 0
+                        motionData[i] = 0;
+                        motionData[i + 1] = 0;
+                        motionData[i + 2] = 0;
+                        motionData[i + 3] = 0;
+                    }
+                }
+
+                // --- Improved Persistence Handling ---
+                const currentTime = originalVideo.currentTime; // Use actual video time
+                const targetFrames = persistenceFrames; // Desired number of frames to track
+
+                // Add current motion to the beginning of the buffer (newest first)
+                persistenceBuffer.unshift({
+                    data: motionData,
+                    time: currentTime // Store actual timestamp
+                });
+
+                // Ensure buffer only holds the last 'targetFrames' entries
+                if (persistenceBuffer.length > targetFrames) {
+                    persistenceBuffer = persistenceBuffer.slice(0, targetFrames);
+                }
+
+                // Calculate the time of the oldest relevant frame in the buffer for fading
+                let oldestTime = currentTime; // Default if buffer is empty or has one frame
+                if (persistenceBuffer.length > 1) {
+                     oldestTime = persistenceBuffer[persistenceBuffer.length - 1].time;
+                }
+                const timeWindow = Math.max(0.001, currentTime - oldestTime); // Avoid division by zero
+
+                // Combine motion data from buffer
+                const combinedMotion = new Uint8ClampedArray(currentData.length);
+
+                // Apply persistence effect
+                for (let frameIdx = 0; frameIdx < persistenceBuffer.length; frameIdx++) {
+                    const frame = persistenceBuffer[frameIdx];
+
+                    let frameWeight = 1.0; // Default weight if not fading or single frame
+                    if (fadeEffect && persistenceBuffer.length > 1) {
+                        // Calculate weight based on frame age relative to the current time window
+                        const frameAge = currentTime - frame.time;
+                        // Normalize age to 0 (newest) to 1 (oldest within window)
+                        const ageRatio = Math.min(1.0, Math.max(0.0, frameAge / timeWindow));
+                        // Invert so newer frames are brighter (weight 1 to 0)
+                        frameWeight = 1.0 - ageRatio;
+                    }
+                    // If not fading, frameWeight remains 1.0, so all frames contribute equally
+
+                    for (let i = 0; i < combinedMotion.length; i += 4) {
+                        // Check if this specific buffered frame has motion at this pixel (check alpha or any color)
+                        // Using alpha check as it's often the most reliable indicator set by us.
+                        if (frame.data[i + 3] > 0) { // If motion detected in this frame's data
+                            // Accumulate motion color values, applying the calculated weight
+                            // Use max blend for better persistence/visibility
+                            combinedMotion[i] = Math.max(combinedMotion[i], frame.data[i] * frameWeight);
+                            combinedMotion[i + 1] = Math.max(combinedMotion[i + 1], frame.data[i + 1] * frameWeight);
+                            combinedMotion[i + 2] = Math.max(combinedMotion[i + 2], frame.data[i + 2] * frameWeight);
+                            // For alpha, max is usually better to ensure visibility if any frame detected motion
+                            combinedMotion[i + 3] = Math.max(combinedMotion[i + 3], frame.data[i + 3] * frameWeight);
+                        }
+                    }
+                }
+
+                // Overlay combined motion on grayscale background
+                // Use a "screen" or "lighten" blend mode logic for clearer highlights
+                for (let i = 0; i < currentData.length; i += 4) {
+                    // Check if combined motion has any data to show (checking alpha or color)
+                    if (combinedMotion[i + 3] > 0 || combinedMotion[i] > 0 || combinedMotion[i+1] > 0 || combinedMotion[i+2] > 0) {
+                        // Simple Add Blend (can wash out colors)
+                        // currentData[i] = Math.min(255, currentData[i] + combinedMotion[i]);
+                        // currentData[i + 1] = Math.min(255, currentData[i + 1] + combinedMotion[i + 1]);
+                        // currentData[i + 2] = Math.min(255, currentData[i + 2] + combinedMotion[i + 2]);
+                        // currentData[i + 3] = 255; // Force opaque
+
+                        // Lighten Blend (preserves background, makes motion visible)
+                        // This tends to work well for highlights over grayscale
+                        currentData[i] = Math.min(255, Math.max(currentData[i], combinedMotion[i]));
+                        currentData[i + 1] = Math.min(255, Math.max(currentData[i + 1], combinedMotion[i + 1]));
+                        currentData[i + 2] = Math.min(255, Math.max(currentData[i + 2], combinedMotion[i + 2]));
+                        // Ensure the pixel is visible if motion was detected
+                        if (useA && combinedMotion[i+3] > 0) {
+                             currentData[i + 3] = Math.max(currentData[i + 3], combinedMotion[i + 3]);
+                        }
+                    }
+                    // If no motion, the grayscale background pixel remains unchanged
+                }
+            }
+
+            // Draw the final image (background + motion overlay)
+            ctx.putImageData(currentFrame, 0, 0);
+
+            // Store current frame as last frame for next iteration
+            lastFrame = currentFrame;
+
+            // Update performance stats
+            updatePerformanceStats();
+
+            // Continue processing
+            if (!originalVideo.paused && !originalVideo.ended) {
+                animationFrameId = requestAnimationFrame(detectMotion);
+            } else {
+                // Optional: stopProcessing(); // Or handle pause state differently
+            }
+        }
+        // Update performance statistics
+        function updatePerformanceStats() {
+            frameCount++;
+            const currentTime = performance.now();
+            const elapsedTime = currentTime - lastTime;
+            // Update FPS every 10 frames
+            if (frameCount % 10 === 0) {
+                fps = Math.round(10000 / elapsedTime) / 10;
+                fpsValue.textContent = `${fps} FPS`;
+                lastTime = currentTime;
+            }
+            // Update processing time
+            const processTime = performance.now() - processingStartTime;
+            processingTime.textContent = `${Math.round(processTime)}ms`;
+        }
+        // Handle video end
+        originalVideo.addEventListener('ended', () => {
+            if (isProcessing) {
+                stopProcessing();
+            }
+        });
+        // Handle video pause
+        originalVideo.addEventListener('pause', () => {
+            if (isProcessing) {
+                stopProcessing();
+            }
+        });
+        // Handle video seek (rewind/forward)
+        originalVideo.addEventListener('seeked', () => {
+            // Reset persistence buffer when seeking
+            persistenceBuffer = [];
+            lastFrame = null;
+            // Restart processing if needed
+            if (!isProcessing && videoFile) {
+                startProcessing();
+            }
+        });
+        // Initialize slider values
+        sensitivityValue.textContent = `${sensitivitySlider.value}%`;
+        thresholdValue.textContent = thresholdSlider.value;
+        persistenceValue.textContent = `${persistenceSlider.value} frames`;
+        brightnessValue.textContent = `${brightnessSlider.value}%`;
+        intensityValue.textContent = `${intensitySlider.value}%`;
+    </script>
+</body>
+</html>
