@@ -109,9 +109,6 @@ class PeerFuncs {
         config: {
             iceServers: [
             {
-                urls: "stun:stun.relay.metered.ca:80",
-            },
-            {
                 urls: "turn:global.relay.metered.ca:80",
                 username: "cb658ce6eafa2545cd570d9b",
                 credential: "zrdCefkSKBk7E6/h",
