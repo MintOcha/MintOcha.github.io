@@ -252,7 +252,7 @@ class PeerFuncs {
 
             case MESSAGE_TYPES.IMAGE:
                 // Display image message with verified sender info
-                const imagePrefix = isDecrypted ? '🔒 ' : '🔓 ';
+                const imagePrefix = isDecrypted ? '' : '🔓 ';
                 window.addMessage && window.addMessage(
                     imagePrefix + `Shared an image: ${data.filename}`, 
                     verifiedSenderId, 
@@ -277,7 +277,7 @@ class PeerFuncs {
 
             case MESSAGE_TYPES.VIDEO:
                 // Display video message with verified sender info
-                const videoPrefix = isDecrypted ? '🔒 ' : '🔓 ';
+                const videoPrefix = isDecrypted ? '' : '🔓 ';
                 window.addMessage && window.addMessage(
                     videoPrefix + `Shared a video: ${data.filename}`, 
                     verifiedSenderId, 
@@ -302,7 +302,7 @@ class PeerFuncs {
 
             case MESSAGE_TYPES.FILE:
                 // Display file message with verified sender info
-                const filePrefix = isDecrypted ? '🔒 ' : '🔓 ';
+                const filePrefix = isDecrypted ? '' : '🔓 ';
                 window.addMessage && window.addMessage(
                     filePrefix + `Shared a file: ${data.filename}`, 
                     verifiedSenderId, 
@@ -424,7 +424,15 @@ class PeerFuncs {
         this.broadcastMessage(keyExchangeMessage);
         
         window.addMessage && window.addMessage(
-            '🔄 Initiating key exchange...', 
+            '🔄 Initiating Diffie Hellman key exchange...', 
+            'system', 'System', 'system'
+        );
+        window.addMessage && window.addMessage(
+            'DH is a key exchange protocol that allows two parties to establish a shared secret over an insecure channel. No one, not even me, can read your messages', 
+            'system', 'System', 'system'
+        );
+        window.addMessage && window.addMessage(
+            'When you leave this tab, all messages will be gone forever.',
             'system', 'System', 'system'
         );
     }
@@ -683,7 +691,7 @@ class PeerFuncs {
             );
             
             // Add to local UI first
-            const prefix = '🔒 ';
+            const prefix = '';
             let displayText = '';
             if (messageType === MESSAGE_TYPES.IMAGE) {
                 displayText = prefix + `Shared an image: ${file.name}`;
