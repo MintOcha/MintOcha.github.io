@@ -101,6 +101,16 @@ function App() {
     setConnectedUsers([]);
   };
 
+  // Helper function to determine if we should show profile and name for a message
+  const shouldShowProfileAndName = (message, index) => {
+    if (message.type === 'system') return false;
+    if (index === 0) return true; // Always show for first message
+    
+    const prevMessage = messages[index - 1];
+    // Show profile if previous message is from different sender or is a system message
+    return prevMessage.senderName !== message.senderName || prevMessage.type === 'system';
+  };
+
   // Mobile sidebar functions
   const toggleMobileSidebar = () => {
     setIsMobileSidebarOpen(!isMobileSidebarOpen);
@@ -325,23 +335,6 @@ function App() {
   // CHAT ROOM PAGE - Convert to render function
   const renderChatRoomPage = () => (
     <div className="page chat-room-page">
-      <div className="page-header">
-        <button className="back-btn" onClick={goHome}>
-          <i className="fas fa-arrow-left"></i> Back
-        </button>
-        <button className="mobile-menu-btn" onClick={toggleMobileSidebar}>
-          <i className="fas fa-bars"></i>
-        </button>
-        <h2>Chat Room {roomId}</h2>
-        <div className="connection-status">
-          {isConnected ? (
-            <span className="connected"><i className="fas fa-circle"></i> Connected</span>
-          ) : (
-            <span className="disconnected"><i className="fas fa-circle"></i> Connecting...</span>
-          )}
-        </div>
-      </div>
-      
       {/* Mobile sidebar backdrop */}
       {isMobileSidebarOpen && (
         <div className="mobile-sidebar-backdrop" onClick={closeMobileSidebar}></div>
@@ -350,7 +343,9 @@ function App() {
       <div className="chat-container-desktop">
         <div className={`chat-sidebar ${isMobileSidebarOpen ? 'mobile-open' : ''}`}>
           <div className="sidebar-header">
-            <h4><i className="fas fa-cog"></i> Menu</h4>
+            <button className="back-btn" onClick={goHome}>
+              <i className="fas fa-arrow-left"></i> Back
+            </button>
             <button className="close-sidebar-btn" onClick={closeMobileSidebar}>
               <i className="fas fa-times"></i>
             </button>
@@ -408,102 +403,34 @@ function App() {
         </div>
         
         <div className="chat-main">
+          <div className="chat-main-header">
+            <div className="room-info">
+              <h3>Chat Room: {roomId || 'Loading...'}</h3>
+            </div>
+            <div className="header-right">
+              <div className="connection-status">
+                {isConnected ? (
+                  <span className="connected"><i className="fas fa-circle"></i> Connected</span>
+                ) : (
+                  <span className="disconnected"><i className="fas fa-circle"></i> Connecting...</span>
+                )}
+              </div>
+              <button className="mobile-menu-toggle" onClick={toggleMobileSidebar}>
+                <i className="fas fa-bars"></i> Menu
+              </button>
+            </div>
+          </div>
           <div className="chat-messages-desktop">
             {messages.length > 0 ? (
               <div className="messages-container">
-                {messages.map((message) => (
-                  <div 
-                    key={message.id} 
-                    className={`message ${message.isOwnMessage ? 'own-message' : 'other-message'} ${message.type === 'system' ? 'system-message' : ''}`}
-                  >
-                    <div className="message-avatar">
-                      {message.senderName.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="message-content-wrapper">
-                      <div className="message-header">
-                        <span className="message-sender">{message.senderName}</span>
-                        <span className="message-time">{message.timestamp}</span>
-                        {message.type && message.type !== 'text' && (
-                          <span className="message-type-badge">{message.type}</span>
-                        )}
-                      </div>
-                      <div className="message-content">
-                        {/* Render different content based on message type */}
-                        {message.type === 'image' && message.mediaData ? (
-                          <div className="media-message">
-                            <p>{message.content}</p>
-                            <img 
-                              src={message.mediaData.base64Data} 
-                              alt={message.mediaData.filename}
-                              className="responsive-media"
-                              onClick={() => window.open(message.mediaData.base64Data, '_blank')}
-                              title={`${message.mediaData.filename} (${(message.mediaData.size / 1024 / 1024).toFixed(2)} MB)`}
-                            />
-                            <div className="file-attachment">
-                              <i className="fas fa-download"></i>
-                              <a 
-                                href={message.mediaData.base64Data} 
-                                download={message.mediaData.filename}
-                                className="file-download"
-                              >
-                                Download {message.mediaData.filename} ({(message.mediaData.size / 1024).toFixed(1)} KB)
-                              </a>
-                            </div>
-                          </div>
-                        ) : message.type === 'video' && message.mediaData ? (
-                          <div className="media-message">
-                            <p>{message.content}</p>
-                            <video 
-                              controls 
-                              className="responsive-media"
-                              title={`${message.mediaData.filename} (${(message.mediaData.size / 1024 / 1024).toFixed(2)} MB)`}
-                            >
-                              <source src={message.mediaData.base64Data} type={message.mediaData.mimeType} />
-                              Your browser does not support the video element.
-                            </video>
-                            <div className="file-attachment">
-                              <i className="fas fa-download"></i>
-                              <a 
-                                href={message.mediaData.base64Data} 
-                                download={message.mediaData.filename}
-                                className="file-download"
-                              >
-                                Download {message.mediaData.filename} ({(message.mediaData.size / 1024).toFixed(1)} KB)
-                              </a>
-                            </div>
-                          </div>
-                        ) : message.type === 'file' && message.mediaData ? (
-                          <div className="media-message">
-                            <p>{message.content}</p>
-                            <div className="file-attachment">
-                              <i className="fas fa-file"></i>
-                              <span className="file-info">
-                                <strong>{message.mediaData.filename}</strong>
-                                <br />
-                                <small>
-                                  {message.mediaData.mimeType || 'Unknown type'} • 
-                                  {message.mediaData.size > 1024 * 1024 
-                                    ? `${(message.mediaData.size / 1024 / 1024).toFixed(2)} MB`
-                                    : `${(message.mediaData.size / 1024).toFixed(1)} KB`
-                                  }
-                                </small>
-                              </span>
-                              <a 
-                                href={message.mediaData.base64Data} 
-                                download={message.mediaData.filename}
-                                className="file-download-btn"
-                              >
-                                <i className="fas fa-download"></i> Download
-                              </a>
-                            </div>
-                          </div>
-                        ) : (
-                          /* XSS-safe: React automatically escapes text content */
-                          message.content
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                {messages.map((message, index) => (
+                  <ChatMessage
+                    key={message.id}
+                    message={message}
+                    showProfileAndName={shouldShowProfileAndName(message, index)}
+                    isOwnMessage={message.isOwnMessage}
+                    isSystemMessage={message.type === 'system'}
+                  />
                 ))}
                 <div ref={messagesEndRef} />
               </div>

@@ -79,6 +79,31 @@ async function fileToBase64(file) {
 }
 
 class PeerFuncs {
+    monitorConnectionState(connection) {
+        if (!connection || !connection.peerConnection) {
+            return;
+        }
+
+        connection.peerConnection.onconnectionstatechange = () => {
+            if (!connection || !connection.peerConnection) return;
+
+            const state = connection.peerConnection.connectionState;
+            console.log(`connectionStateChanged to: ${state} for peer ${connection.peer}`);
+
+            switch (state) {
+                case 'disconnected':
+                case 'failed':
+                case 'closed':
+                    this.handleDisconnect(connection);
+                    break;
+                case 'connected':
+                    // Connection is healthy
+                    window.setConnectionStatus && window.setConnectionStatus(true);
+                    break;
+            }
+        };
+    }
+
     init() {
         peer = new Peer();
         peer.on('open', id => {
@@ -90,6 +115,7 @@ class PeerFuncs {
             console.log(`New connection from ${newConnection.peer}`);
 
             newConnection.on('open', () => {
+                this.monitorConnectionState(newConnection);
                 // Send system message about user joining
                 this.sendSystemMessage(`[${newConnection.peer.slice(0, 6)}] has joined.`, newConnection.peer);
                 
@@ -115,14 +141,7 @@ class PeerFuncs {
             });
 
             newConnection.on('close', () => {
-                this.sendSystemMessage(`[${newConnection.peer.slice(0, 6)}] has left.`, newConnection.peer);
-                connections = connections.filter(c => c.peer !== newConnection.peer);
-                
-                // Remove user from the list
-                window.removeUser && window.removeUser(newConnection.peer);
-                
-                // Reset shared key since user left (2-party only supports one connection)
-                finalKey = null;
+                this.handleDisconnect(newConnection);
             });
         });
 
@@ -429,6 +448,7 @@ class PeerFuncs {
         }, 10000); // 10 second timeout
         
         conn.on('open', () => {
+            this.monitorConnectionState(conn);
             clearTimeout(connectionTimeout);
             connections.push(conn);
             console.log(`Connected to: ${peerId}`);
@@ -455,10 +475,8 @@ class PeerFuncs {
                 }
             });
             
-            conn.on('close', () => {    
-                console.log(`Connection to ${peerId} closed.`);
-                connections = connections.filter(c => c.peer !== peerId);
-                this.sendSystemMessage(`Connection to ${peerId.slice(0, 8)} closed`);
+            conn.on('close', () => {
+                this.handleDisconnect(conn);
             });
         });
 
@@ -471,6 +489,30 @@ class PeerFuncs {
             window.clearUserList && window.clearUserList();
             window.goHome && window.goHome();
         });
+    }
+
+    handleDisconnect(connection) {
+        if (!connection) return;
+
+        const peerId = connection.peer;
+        // Ensure we only handle this once
+        const existingConnection = connections.find(c => c.peer === peerId);
+        if (!existingConnection) {
+            return; // Already handled
+        }
+
+        this.sendSystemMessage(`[${peerId.slice(0, 6)}] has disconnected.`);
+        connections = connections.filter(c => c.peer !== peerId);
+        
+        // Remove user from the list
+        window.removeUser && window.removeUser(peerId);
+        
+        // If no connections are left, update status
+        if (connections.length === 0) {
+            window.setConnectionStatus && window.setConnectionStatus(false);
+            finalKey = null; // Reset key
+            this.sendSystemMessage("All users have disconnected.");
+        }
     }
 
     // Broadcast JSON message to all connections except sender

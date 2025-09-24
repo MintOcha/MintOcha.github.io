@@ -50,6 +50,141 @@ function EmojiButton({ onClick, className = "" }) {
   );
 }
 
+// ChatMessage Component - A reusable message component
+function ChatMessage({ 
+  message, 
+  showProfileAndName = true,
+  isOwnMessage = false,
+  isSystemMessage = false 
+}) {
+  const renderMessageContent = () => {
+    // Render different content based on message type
+    if (message.type === 'image' && message.mediaData) {
+      return (
+        <div className="media-message">
+          <p>{message.content}</p>
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <img 
+              src={message.mediaData.base64Data} 
+              alt={message.mediaData.filename}
+              className="responsive-media"
+              onClick={() => window.open(message.mediaData.base64Data, '_blank')}
+              title={`${message.mediaData.filename} (${(message.mediaData.size / 1024 / 1024).toFixed(2)} MB)`}
+            />
+            <button
+              className="image-download-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                const link = document.createElement('a');
+                link.href = message.mediaData.base64Data;
+                link.download = message.mediaData.filename;
+                link.click();
+              }}
+              title="Download image"
+            >
+              <i className="fas fa-download"></i>
+            </button>
+          </div>
+        </div>
+      );
+    } else if (message.type === 'video' && message.mediaData) {
+      return (
+        <div className="media-message">
+          <p>{message.content}</p>
+          <div style={{ position: 'relative', display: 'inline-block' }}>
+            <video 
+              controls 
+              className="responsive-media"
+              title={`${message.mediaData.filename} (${(message.mediaData.size / 1024 / 1024).toFixed(2)} MB)`}
+            >
+              <source src={message.mediaData.base64Data} type={message.mediaData.mimeType} />
+              Your browser does not support the video element.
+            </video>
+            <button
+              className="image-download-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                const link = document.createElement('a');
+                link.href = message.mediaData.base64Data;
+                link.download = message.mediaData.filename;
+                link.click();
+              }}
+              title="Download video"
+            >
+              <i className="fas fa-download"></i>
+            </button>
+          </div>
+        </div>
+      );
+    } else if (message.type === 'file' && message.mediaData) {
+      return (
+        <div className="media-message">
+          <p>{message.content}</p>
+          <div className="file-attachment">
+            <i className="fas fa-file"></i>
+            <span className="file-info">
+              <strong>{message.mediaData.filename}</strong>
+              <br />
+              <small>
+                {message.mediaData.mimeType || 'Unknown type'} • 
+                {message.mediaData.size > 1024 * 1024 
+                  ? `${(message.mediaData.size / 1024 / 1024).toFixed(2)} MB`
+                  : `${(message.mediaData.size / 1024).toFixed(1)} KB`
+                }
+              </small>
+            </span>
+            <a 
+              href={message.mediaData.base64Data} 
+              download={message.mediaData.filename}
+              className="file-download-btn"
+            >
+              <i className="fas fa-download"></i> Download
+            </a>
+          </div>
+        </div>
+      );
+    } else {
+      // XSS-safe: React automatically escapes text content
+      return message.content;
+    }
+  };
+
+  return (
+    <div 
+      className={`message ${isOwnMessage ? 'own-message' : 'other-message'} ${isSystemMessage ? 'system-message' : ''} ${!showProfileAndName && !isSystemMessage ? 'no-avatar' : ''}`}
+    >
+      {(showProfileAndName || isSystemMessage) && (
+        <div className="message-avatar">
+          {isSystemMessage ? (
+            <i className="fas fa-info-circle"></i>
+          ) : (
+            message.senderName.charAt(0).toUpperCase()
+          )}
+        </div>
+      )}
+      <div className="message-content-wrapper">
+        {(showProfileAndName || isSystemMessage) && (
+          <div className="message-header">
+            <span className="message-sender">
+              {isSystemMessage ? 'System' : message.senderName}
+            </span>
+            <span className="message-time">{message.timestamp}</span>
+            {message.type && message.type !== 'text' && (
+              <span className="message-type-badge">{message.type}</span>
+            )}
+            {isSystemMessage && (
+              <span className="message-type-badge system-badge">System</span>
+            )}
+          </div>
+        )}
+        <div className="message-content">
+          {renderMessageContent()}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ChatDemo Component - Example of how to use the components together
 function ChatDemo() {
   const [message, setMessage] = useState('');
@@ -225,6 +360,7 @@ function NotificationContainer({ notifications = [], onRemove = null }) {
 window.TextBox = TextBox;
 window.SendButton = SendButton;
 window.EmojiButton = EmojiButton;
+window.ChatMessage = ChatMessage;
 window.ChatDemo = ChatDemo;
 window.TextButton = TextButton;
 window.InfoCard = InfoCard;
