@@ -1,0 +1,13 @@
+{
+  "name": "mintchat",
+  "private": true,
+  "description": "MintChat End-to-End Encrypted Chat Application: The cutest way to chat securely!",
+  "version": "0.0.0",
+  "scripts": {
+    "start": "npx serve --listen 3000 .",
+    "serve": "npx serve --listen 3000 ."
+  },
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}

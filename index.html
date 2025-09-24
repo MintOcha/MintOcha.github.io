@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MintChat - End-to-End Encrypted Chat</title>
+    
+    <!-- React and ReactDOM from CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel Standalone for JSX transformation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- External dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.3.1/dist/peerjs.min.js"></script>
+    
+    <!-- CSS files -->
+    <link rel="stylesheet" href="./src/index.css">
+    <link rel="stylesheet" href="./src/App.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    
+    <!-- Load components in correct order -->
+    <script type="text/babel" src="./src/Peer.jsx"></script>
+    <script type="text/babel" src="./src/Ui.jsx"></script>
+    <script type="text/babel" src="./src/App.jsx"></script>
+    <!-- Main entry point -->
+    <script type="text/babel" src="./src/main.jsx"></script>
+  </body>
+</html>
