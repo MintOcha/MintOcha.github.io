@@ -951,8 +951,8 @@ body {
   flex: 1;
   /* use a variable for padding so mobile/desktop adjustments are easier */
   padding: var(--chat-messages-padding, 2rem);
-  /* reserve space at bottom equal to the input bar height so content isn't hidden */
-  padding-bottom: calc(var(--chat-input-desktop-height) + 0.5rem);
+  /* remove bottom padding from here */
+  padding-bottom: 0;
   background: #1a202c;
   /* let the inner .messages-container handle scrolling */
   overflow: hidden;
@@ -1056,6 +1056,8 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0.25rem; /* reduced padding */
+  /* Add padding to the bottom of the scrollable container */
+  padding-bottom: calc(var(--chat-input-desktop-height, 88px) + 2rem);
   display: flex;
   flex-direction: column;
   gap: 0.25rem; /* reduced vertical gap between messages */
@@ -1716,7 +1718,7 @@ body {
   }
   
   .chat-messages-desktop {
-    padding: 0.2rem 0.5rem 1rem;
+    padding: 0.2rem 0.5rem 10rem;
     max-height: 60vh;
   }
   
