@@ -105,33 +105,42 @@ class PeerFuncs {
     }
 
     init() {
-        peer = new Peer(undefined, {
-        config: {
-            iceServers: [
-            {
-                urls: "turn:global.relay.metered.ca:80",
-                username: "cb658ce6eafa2545cd570d9b",
-                credential: "zrdCefkSKBk7E6/h",
-            },
-            {
-                urls: "turn:global.relay.metered.ca:80?transport=tcp",
-                username: "cb658ce6eafa2545cd570d9b",
-                credential: "zrdCefkSKBk7E6/h",
-            },
-            {
-                urls: "turn:global.relay.metered.ca:443",
-                username: "cb658ce6eafa2545cd570d9b",
-                credential: "zrdCefkSKBk7E6/h",
-            },
-            {
-                urls: "turns:global.relay.metered.ca:443?transport=tcp",
-                username: "cb658ce6eafa2545cd570d9b",
-                credential: "zrdCefkSKBk7E6/h",
-            },
-        ]
+        // Disconnect and destroy any existing peer connection before creating a new one.
+        if (peer) {
+            peer.destroy();
         }
-    });
+
+        peer = new Peer(undefined, {
+            // host: 'your_peerjs_server.com', // or 'localhost' if running locally
+            // port: 9000, // or your custom port
+            // path: '/peerjs',
+            config: {
+                iceServers: [
+                {
+                    urls: "turn:global.relay.metered.ca:80",
+                    username: "cb658ce6eafa2545cd570d9b",
+                    credential: "zrdCefkSKBk7E6/h",
+                },
+                {
+                    urls: "turn:global.relay.metered.ca:80?transport=tcp",
+                    username: "cb658ce6eafa2545cd570d9b",
+                    credential: "zrdCefkSKBk7E6/h",
+                },
+                {
+                    urls: "turn:global.relay.metered.ca:443",
+                    username: "cb658ce6eafa2545cd570d9b",
+                    credential: "zrdCefkSKBk7E6/h",
+                },
+                {
+                    urls: "turns:global.relay.metered.ca:443?transport=tcp",
+                    username: "cb658ce6eafa2545cd570d9b",
+                    credential: "zrdCefkSKBk7E6/h",
+                },
+            ]
+            }
+        });
         peer.on('open', id => {
+            console.log('My peer ID is:', id);
             window.myId = id;
         });
 
@@ -173,6 +182,19 @@ class PeerFuncs {
         peer.on('error', err => {
             console.error('PeerJS Error:', err);
             window.notify && window.notify(`PeerJS Error: ${err.message}`, 5000, 'error');
+            if (err.type === 'disconnected' || err.type === 'network') {
+                console.log('Lost connection to PeerJS server. Attempting to reconnect...');
+                window.notify && window.notify('Lost connection. Reconnecting...', 5000, 'warning');
+                // Implement a delay before attempting reconnection to avoid hammering the server
+                setTimeout(() => {
+                    peer.reconnect();
+                }, 5000); // Reconnect after 5 seconds
+            }
+        });
+
+        peer.on('close', () => {
+            console.log('Peer connection closed.');
+            window.notify && window.notify('Peer connection closed.', 3000, 'info');
         });
     }
 
