@@ -105,7 +105,17 @@ class PeerFuncs {
     }
 
     init() {
-        peer = new Peer();
+        peer = new Peer(undefined, {
+        config: {
+            iceServers: [
+                {
+                    urls: "turn:global.relay.metered.ca:80", // Replace with your TURN server URL
+                    username: " cb658ce6eafa2545cd570d9b", // Replace with your TURN username
+                    credential: "zrdCefkSKBk7E6/h", // Replace with your TURN credential
+               }
+            ]
+        }
+    });
         peer.on('open', id => {
             window.myId = id;
         });
