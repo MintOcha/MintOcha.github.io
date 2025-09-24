@@ -7,15 +7,13 @@ let peer;
 window.myId = '';
 let currentRoomId = '';
 let connections = [];
+
+// Simple 2-party Diffie-Hellman state
 let myPrivateKey = BigInt(crypto.getRandomValues(new Uint32Array(1))[0]);
 let myPublicKey;
 let finalKey;
 
-
 function setCurrentRoomId(id) {
-    // (DO NOT IMPLEMENT FOR NOW) dynamically compute primemod for each room
-    let roomIdHash = crypto.subtle.digest('SHA-256', new TextEncoder().encode(id));
-    let roomIdHashInt = BigInt(Array.from(new Uint8Array(roomIdHash)).map(b => b.toString(16).padStart(2, '0')).join(''), 16);
     currentRoomId = id;
     myPublicKey = modularExponentiation(BigInt(base), BigInt(myPrivateKey), BigInt(primeMod));
 }
@@ -33,6 +31,7 @@ const MESSAGE_TYPES = {
     FILE: 'file'
 };
 
+// 2-party Diffie-Hellman functions
 function createKeyExchangeMessage() {
     return {
         type: MESSAGE_TYPES.PUBLIC_KEY,
@@ -98,10 +97,8 @@ class PeerFuncs {
                 window.addUser && window.addUser(newConnection.peer, false);
                 window.setConnectionStatus && window.setConnectionStatus(true);
 
-                // Start key exchange with JSON format
-
-
-                newConnection.send(JSON.stringify(createKeyExchangeMessage()));
+                // Trigger key exchange with new participant
+                this.initiateKeyExchange();
             });
 
             // Event: When we receive data from this specific connection
@@ -123,6 +120,9 @@ class PeerFuncs {
                 
                 // Remove user from the list
                 window.removeUser && window.removeUser(newConnection.peer);
+                
+                // Reset shared key since user left (2-party only supports one connection)
+                finalKey = null;
             });
         });
 
@@ -260,17 +260,17 @@ class PeerFuncs {
                 break;
                 
             case MESSAGE_TYPES.SYSTEM:
-                // Handle system messages
+                // SECURITY: Block SYSTEM messages from external peers to prevent spoofing
+                // System messages should only be generated locally, not accepted from network
+                console.warn(`Blocked SYSTEM message from external peer: ${verifiedSenderId}`);
                 window.addMessage && window.addMessage(
-                    content, 
-                    'system', 
-                    'System',
-                    'system'
+                    `⚠️ Security Warning: Peer ${verifiedSenderId.slice(0, 6)} attempted to send a system message (blocked)`, 
+                    'system', 'System', 'system'
                 );
                 break;
                 
             case MESSAGE_TYPES.PUBLIC_KEY:
-                // Handle key exchange
+                // Legacy 2-party key exchange - still supported for backward compatibility
                 const receivedPubKey = data.publicKey;
                 const receivedPubKeyRepresentation = BigInt(receivedPubKey).toString(16).slice(0, 16);
                 window.addMessage(`Received public key: ${receivedPubKeyRepresentation}...`, 'System', 'system', 'system');
@@ -349,6 +349,18 @@ class PeerFuncs {
         // Convert to JSON format and broadcast with verified sender info
         const jsonMessage = this.createTextMessage(rawData, verifiedSenderId, verifiedSenderName);
         this.broadcastMessage(jsonMessage, connection.peer);
+    }
+
+    // 2-party key exchange method
+    initiateKeyExchange() {
+        // For 2-party exchange, simply send our public key
+        const keyExchangeMessage = createKeyExchangeMessage();
+        this.broadcastMessage(keyExchangeMessage);
+        
+        window.addMessage && window.addMessage(
+            '🔄 Initiating key exchange...', 
+            'system', 'System', 'system'
+        );
     }
 
     createTextMessage(content) {
@@ -430,9 +442,7 @@ class PeerFuncs {
             window.addUser && window.addUser(peerId, true); // Add host
             window.addUser && window.addUser(window.myId, false); // Add self
 
-            // Start key exchange with JSON format
-            
-            conn.send(JSON.stringify(createKeyExchangeMessage()));
+            this.initiateKeyExchange();
 
             conn.on('data', async rawData => {
                 try {
@@ -465,11 +475,28 @@ class PeerFuncs {
 
     // Broadcast JSON message to all connections except sender
     async broadcastMessage(messageData, senderPeer = null) {
-        if (!finalKey) {
-            notify('No shared key available for encryption', 3000, 'warning');
+        // Check if this is a key exchange message that should be sent unencrypted
+        const isKeyExchangeMessage = messageData.type === MESSAGE_TYPES.PUBLIC_KEY;
+        
+        // If no shared key and it's not a key exchange message, refuse to send
+        if (!finalKey && !isKeyExchangeMessage) {
+            console.warn('No shared key available for encryption. Cannot send non-key-exchange message.');
+            window.notify && window.notify('No shared key available for encryption', 3000, 'warning');
+            return;
+        }
+        
+        // Key exchange messages are sent unencrypted to establish the shared key
+        if (isKeyExchangeMessage) {
+            const jsonString = JSON.stringify(messageData);
+            for (let conn of connections) {
+                if (conn && conn.open && conn.peer !== senderPeer) {
+                    conn.send(jsonString);
+                }
+            }
             return;
         }
 
+        // All other messages must be encrypted
         try {
             // Create key hash from finalKey
             const keyBuffer = new TextEncoder().encode(finalKey.toString());
@@ -638,3 +665,4 @@ window.PeerFuncs = PeerFuncs;
 
 // Create a global instance for easy access
 window.peerInstance = new PeerFuncs();
+

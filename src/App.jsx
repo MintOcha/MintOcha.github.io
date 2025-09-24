@@ -13,6 +13,7 @@ function App() {
   const [connectedUsers, setConnectedUsers] = useState([]); // List of connected users
   const [messages, setMessages] = useState([]); // Chat messages
   const [notifications, setNotifications] = useState([]); // Store active notifications
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false); // Mobile sidebar visibility
 
   // Refs for autoscroll
   const messagesEndRef = useRef(null);
@@ -98,6 +99,23 @@ function App() {
 
   const clearUserList = () => {
     setConnectedUsers([]);
+  };
+
+  // Mobile sidebar functions
+  const toggleMobileSidebar = () => {
+    setIsMobileSidebarOpen(!isMobileSidebarOpen);
+  };
+
+  const closeMobileSidebar = () => {
+    setIsMobileSidebarOpen(false);
+  };
+
+  const copyRoomId = () => {
+    if (roomId) {
+      navigator.clipboard.writeText(roomId);
+      notify('Room ID copied to clipboard!', 'success');
+      closeMobileSidebar();
+    }
   };
 
   // Message management functions
@@ -311,6 +329,9 @@ function App() {
         <button className="back-btn" onClick={goHome}>
           <i className="fas fa-arrow-left"></i> Back
         </button>
+        <button className="mobile-menu-btn" onClick={toggleMobileSidebar}>
+          <i className="fas fa-bars"></i>
+        </button>
         <h2>Chat Room {roomId}</h2>
         <div className="connection-status">
           {isConnected ? (
@@ -321,8 +342,26 @@ function App() {
         </div>
       </div>
       
+      {/* Mobile sidebar backdrop */}
+      {isMobileSidebarOpen && (
+        <div className="mobile-sidebar-backdrop" onClick={closeMobileSidebar}></div>
+      )}
+      
       <div className="chat-container-desktop">
-        <div className="chat-sidebar">
+        <div className={`chat-sidebar ${isMobileSidebarOpen ? 'mobile-open' : ''}`}>
+          <div className="sidebar-header">
+            <h4><i className="fas fa-cog"></i> Menu</h4>
+            <button className="close-sidebar-btn" onClick={closeMobileSidebar}>
+              <i className="fas fa-times"></i>
+            </button>
+          </div>
+          
+          <div className="mobile-menu-actions">
+            <button className="menu-action-btn" onClick={copyRoomId}>
+              <i className="fas fa-copy"></i> Copy Room ID
+            </button>
+          </div>
+          
           <div className="chat-info">
             <h4><i className="fas fa-users"></i> Chat Info</h4>
             <p>Room ID: {roomId ? roomId.slice(0, 8) + '...' : 'Loading...'}</p>
@@ -396,12 +435,7 @@ function App() {
                             <img 
                               src={message.mediaData.base64Data} 
                               alt={message.mediaData.filename}
-                              style={{ 
-                                maxWidth: '300px', 
-                                maxHeight: '300px', 
-                                borderRadius: '8px',
-                                cursor: 'pointer'
-                              }}
+                              className="responsive-media"
                               onClick={() => window.open(message.mediaData.base64Data, '_blank')}
                               title={`${message.mediaData.filename} (${(message.mediaData.size / 1024 / 1024).toFixed(2)} MB)`}
                             />
@@ -421,11 +455,7 @@ function App() {
                             <p>{message.content}</p>
                             <video 
                               controls 
-                              style={{ 
-                                maxWidth: '300px', 
-                                maxHeight: '300px', 
-                                borderRadius: '8px'
-                              }}
+                              className="responsive-media"
                               title={`${message.mediaData.filename} (${(message.mediaData.size / 1024 / 1024).toFixed(2)} MB)`}
                             >
                               <source src={message.mediaData.base64Data} type={message.mediaData.mimeType} />
