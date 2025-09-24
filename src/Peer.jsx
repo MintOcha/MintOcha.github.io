@@ -108,12 +108,30 @@ class PeerFuncs {
         peer = new Peer(undefined, {
         config: {
             iceServers: [
-                {
-                    urls: "turn:global.relay.metered.ca:80", // Replace with your TURN server URL
-                    username: " cb658ce6eafa2545cd570d9b", // Replace with your TURN username
-                    credential: "zrdCefkSKBk7E6/h", // Replace with your TURN credential
-               }
-            ]
+            {
+                urls: "stun:stun.relay.metered.ca:80",
+            },
+            {
+                urls: "turn:global.relay.metered.ca:80",
+                username: "cb658ce6eafa2545cd570d9b",
+                credential: "zrdCefkSKBk7E6/h",
+            },
+            {
+                urls: "turn:global.relay.metered.ca:80?transport=tcp",
+                username: "cb658ce6eafa2545cd570d9b",
+                credential: "zrdCefkSKBk7E6/h",
+            },
+            {
+                urls: "turn:global.relay.metered.ca:443",
+                username: "cb658ce6eafa2545cd570d9b",
+                credential: "zrdCefkSKBk7E6/h",
+            },
+            {
+                urls: "turns:global.relay.metered.ca:443?transport=tcp",
+                username: "cb658ce6eafa2545cd570d9b",
+                credential: "zrdCefkSKBk7E6/h",
+            },
+        ]
         }
     });
         peer.on('open', id => {
