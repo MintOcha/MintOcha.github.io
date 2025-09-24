@@ -169,7 +169,7 @@ function ChatMessage({
               {isSystemMessage ? 'System' : message.senderName}
             </span>
             <span className="message-time">{message.timestamp}</span>
-            {message.type && message.type !== 'text' && (
+            {message.type && message.type !== 'text' && message.type !== 'system' && (
               <span className="message-type-badge">{message.type}</span>
             )}
             {isSystemMessage && (
