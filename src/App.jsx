@@ -123,7 +123,7 @@ function App() {
   const copyRoomId = () => {
     if (roomId) {
       navigator.clipboard.writeText(roomId);
-      notify('Room ID copied to clipboard!', 'success');
+      notify('Room ID copied to clipboard!', 2000, 'success');
       closeMobileSidebar();
     }
   };
@@ -196,6 +196,17 @@ function App() {
     }
   }, [chatMessage, isConnected]);
 
+  // Auto-resize mobile textarea
+  useEffect(() => {
+    const el = chatInputRef.current;
+    if (!el) return;
+    if (el.tagName && el.tagName.toLowerCase() === 'textarea') {
+      el.style.height = 'auto';
+      const maxH = Math.floor(window.innerHeight * 0.4);
+      el.style.height = Math.min(el.scrollHeight, maxH) + 'px';
+    }
+  }, [chatMessage]);
+
   const handleFileUpload = useCallback((event) => {
     const file = event.target.files[0];
     if (file && window.peerInstance && isConnected) {
@@ -247,6 +258,7 @@ function App() {
     <div className="page">
       <div className="hero">
         <h1>🌿 MintChat</h1>
+        <span className="mini-version-badge">v0.0.0</span>
         <p>End-to-End Encrypted Chat Application</p>
         <p className="subtitle">The cutest way to chat securely!</p>
       </div>
@@ -271,6 +283,16 @@ function App() {
           <div>
             <h3>Join Chat</h3>
             <p>Connect to existing room</p>
+          </div>
+        </button>
+        <button 
+          className="page-button join-btn"
+          onClick={() => goToPage('about')}
+        >
+          <i className="fas fa-info-circle"></i>
+          <div>
+            <h3>About</h3>
+            <p>How it works • Links • Tips</p>
           </div>
         </button>
       </div>
@@ -351,11 +373,7 @@ function App() {
             </button>
           </div>
           
-          <div className="mobile-menu-actions">
-            <button className="menu-action-btn" onClick={copyRoomId}>
-              <i className="fas fa-copy"></i> Copy Room ID
-            </button>
-          </div>
+          {/* mobile-menu-actions removed to avoid duplicate copy on mobile */}
           
           <div className="chat-info">
             <h4><i className="fas fa-users"></i> Chat Info</h4>
@@ -396,16 +414,21 @@ function App() {
           </div>
           
           <div className="chat-actions">
-            <button className="sidebar-btn" onClick={() => navigator.clipboard?.writeText(roomId)}>
-              <i className="fas fa-copy"></i> Copy ID
+            <button className="sidebar-btn" onClick={copyRoomId}>
+              <i className="fas fa-copy"></i> Copy Room ID
             </button>
           </div>
         </div>
         
         <div className="chat-main">
           <div className="chat-main-header">
-            <div className="room-info">
-              <h3>Chat Room: {roomId || 'Loading...'}</h3>
+            <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <button className="mobile-menu-toggle" onClick={toggleMobileSidebar} title="Menu" aria-label="Menu">
+                <i className="fas fa-bars"></i>
+              </button>
+              <div className="room-info">
+                <h3>Chat Room: {roomId || 'Loading...'}</h3>
+              </div>
             </div>
             <div className="header-right">
               <div className="connection-status">
@@ -415,9 +438,6 @@ function App() {
                   <span className="disconnected"><i className="fas fa-circle"></i> Connecting...</span>
                 )}
               </div>
-              <button className="mobile-menu-toggle" onClick={toggleMobileSidebar}>
-                <i className="fas fa-bars"></i> Menu
-              </button>
             </div>
           </div>
           <div className="chat-messages-desktop">
@@ -468,25 +488,80 @@ function App() {
             >
               <i className="fas fa-paperclip"></i>
             </button>
-            <input
-              ref={chatInputRef}
-              key="stable-chat-input"
-              type="text"
-              className="input-textbox chat-message-input-desktop"
-              placeholder="Type your message here..."
-              value={chatMessage}
-              onChange={(e) => setChatMessage(e.target.value)}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  handleChatSend();
-                }
-              }}
-            />
+            {window.innerWidth <= 768 ? (
+              <textarea
+                ref={chatInputRef}
+                className="input-textbox chat-textarea"
+                placeholder="Type your message here..."
+                value={chatMessage}
+                onChange={(e) => setChatMessage(e.target.value)}
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleChatSend();
+                  }
+                }}
+              />
+            ) : (
+              <input
+                ref={chatInputRef}
+                key="stable-chat-input"
+                type="text"
+                className="input-textbox chat-message-input-desktop"
+                placeholder="Type your message here..."
+                value={chatMessage}
+                onChange={(e) => setChatMessage(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleChatSend();
+                  }
+                }}
+              />
+            )}
             <SendButton 
               onClick={handleChatSend}
               disabled={!chatMessage.trim()}
             />
           </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ABOUT PAGE
+  const renderAboutPage = () => (
+    <div className="page">
+      <div className="page-header">
+        <button className="back-btn" onClick={goHome}>
+          <i className="fas fa-arrow-left"></i> Back
+        </button>
+        <h2>About MintChat</h2>
+      </div>
+
+      <div className="join-container">
+        <div className="info-card" style={{ marginBottom: '1rem' }}>
+          <i className="fas fa-shield-halved"></i>
+          <p>
+            MintChat is a peer-to-peer, end-to-end encrypted chat. We use modern Web Crypto:
+            ECDH (P-256) for key agreement and AES-GCM for encryption. Keys never leave your device.
+          </p>
+        </div>
+        <div className="info-card" style={{ marginBottom: '1rem' }}>
+          <i className="fas fa-list-check"></i>
+          <p>
+            Quick start:
+            <br/>1) Host creates a room and shares the ID.
+            <br/>2) Joiner enters the ID.
+            <br/>3) Both see the same 16-char key code — verify they match.
+            <br/>4) Start chatting securely. Share images, videos, or files.
+          </p>
+        </div>
+        <div className="info-card">
+          <i className="fas fa-link"></i>
+          <p>
+            Links: <a href="https://github.com/mintocha" target="_blank" rel="noopener noreferrer">github.com/mintocha</a>
+          </p>
         </div>
       </div>
     </div>
@@ -531,6 +606,19 @@ function App() {
     </div>
   );
 
+  // Add/remove body class to prevent outer scroll on mobile chat page
+  useEffect(() => {
+    const isMobile = window.innerWidth <= 768;
+    if (currentPage === 'chatroom' && isMobile) {
+      document.body.classList.add('no-scroll');
+    } else {
+      document.body.classList.remove('no-scroll');
+    }
+    return () => {
+      document.body.classList.remove('no-scroll');
+    };
+  }, [currentPage]);
+
   // RENDER CURRENT PAGE - Use render functions instead of components
   const renderCurrentPage = () => {
     if (currentPage === 'home') {
@@ -545,6 +633,9 @@ function App() {
     if (currentPage === 'chatroom') {
       return renderChatRoomPage();
     }
+    if (currentPage === 'about') {
+      return renderAboutPage();
+    }
     if (currentPage === 'demo') {
       return renderDemoPage();
     }
@@ -554,7 +645,7 @@ function App() {
 
 
   return (
-    <div className="app">
+    <div className={`app ${currentPage === 'chatroom' ? 'app--chat' : ''}`}>
       {renderCurrentPage()}
       
       {/* Notification System */}

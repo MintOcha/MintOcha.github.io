@@ -1,28 +1,21 @@
 // Peer.jsx - PeerJS functionality for MintChat
 // SECURITY NOTE: Sender verification is handled by using the PeerJS connection as source of truth
 // Clients cannot spoof sender IDs because each connection has a verified peer ID from PeerJS
-const primeMod = 0xffffffffffffffffc90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b0bff5cb6f406b7edee386bfb5a899fa5ae9f24117c4b1fe649286651ece45b3dc2007cb8a163bf0598da48361c55d39a69163fa8fd24cf5f83655d23dca3ad961c62f356208552bb9ed529077096966d670c354e4abc9804f1746c08ca18217c32905e462e36ce3be39e772c180e86039b2783a2ec07a28fb5c55df06f4c52c9de2bcbf6955817183995497cea956ae515d2261898fa051015728e5a8aaac42dad33170d04507a33a85521abdf1cba64ecfb850458dbef0a8aea71575d060c7db3970f85a6e1e4c7abf5ae8cdb0933d71e8c94e04a25619dcee3d2261ad2ee6bf12ffa06d98a0864d87602733ec86a64521f2b18177b200cbbe117577a615d6c770988c0bad946e208e24fa074e5ab3143db5bfce0fd108e4b82d120a92108011a723c12a787e6d788719a10bdba5b2699c327186af4e23c1a946834b6150bda2583e9ca2ad44ce8dbbbc2db04de8ef92e8efc141fbecaa6287c59474e6bc05d99b2964fa090c3a2233ba186515be7ed1f612970cee2d7afb81bdd762170481cd0069127d5b05aa993b4ea988d8fddc186ffb7dc90a6c08f4df435c934063199ffffffffffffffffn;
-let base = 2n;
 let peer;
 window.myId = '';
 let currentRoomId = '';
 let connections = [];
 
-// Simple 2-party Diffie-Hellman state
-let myPrivateKey = BigInt(crypto.getRandomValues(new Uint32Array(1))[0]);
-let myPublicKey;
-let finalKey;
-
 function setCurrentRoomId(id) {
     currentRoomId = id;
-    myPublicKey = modularExponentiation(BigInt(base), BigInt(myPrivateKey), BigInt(primeMod));
 }
 
 // Message types for JSON communication
 const MESSAGE_TYPES = {
     TEXT: 'text',
     SYSTEM: 'system',
-    PUBLIC_KEY: 'publicKey',
+    ECDH_PUBLIC_KEY: 'ecdhPublicKey', // New key exchange message
+    TIMESTAMP_SALT: 'timestampSalt', // For key verification
     USER_JOIN: 'userJoin',
     USER_LEAVE: 'userLeave',
     ENCRYPTED: 'encrypted',
@@ -31,30 +24,7 @@ const MESSAGE_TYPES = {
     FILE: 'file'
 };
 
-// 2-party Diffie-Hellman functions
-function createKeyExchangeMessage() {
-    return {
-        type: MESSAGE_TYPES.PUBLIC_KEY,
-        timestamp: Date.now(),
-        data: {
-            publicKey: myPublicKey.toString()
-        }
-    };
-}
 
-function modularExponentiation(base, exponent, modulus) {
-    if (modulus === 1n) return 0n;
-    let result = 1n;
-    base = base % modulus;
-    while (exponent > 0n) {
-        if (exponent % 2n === 1n) {
-            result = (result * base) % modulus;
-        }
-        exponent = exponent / 2n; // BigInt division
-        base = (base * base) % modulus;
-    }
-    return result;
-}
 
 // Media utility functions
 function getMediaType(file) {
@@ -158,7 +128,7 @@ class PeerFuncs {
                 window.setConnectionStatus && window.setConnectionStatus(true);
 
                 // Trigger key exchange with new participant
-                this.initiateKeyExchange();
+                this.initiateKeyExchange(newConnection);
             });
 
             // Event: When we receive data from this specific connection
@@ -208,7 +178,7 @@ class PeerFuncs {
         const verifiedSenderName = connection.peer.slice(0, 8); // Use first 8 chars of peer ID as name
         
         // Add unencrypted warning for messages that should be encrypted
-        if (!isDecrypted && type !== MESSAGE_TYPES.SYSTEM && type !== MESSAGE_TYPES.PUBLIC_KEY && type !== MESSAGE_TYPES.ENCRYPTED) {
+        if (!isDecrypted && type !== MESSAGE_TYPES.SYSTEM && type !== MESSAGE_TYPES.ECDH_PUBLIC_KEY && type !== MESSAGE_TYPES.ENCRYPTED && type !== MESSAGE_TYPES.TIMESTAMP_SALT) {
             window.addMessage && window.addMessage(
                 '⚠️ WARNING: This message was sent UNENCRYPTED and could be intercepted!', 
                 'system', 'System', 'system'
@@ -216,6 +186,35 @@ class PeerFuncs {
         }
         
         switch (type) {
+            case MESSAGE_TYPES.ECDH_PUBLIC_KEY:
+                window.addMessage('🔑 Received public key, deriving shared secret...', 'system', 'System', 'system');
+                const { publicKey: peerPublicKey, timestamp: peerTimestamp } = data;
+                
+                // If we don't have our keys yet, generate them.
+                if (!window.MPDH.keyPair) {
+                    await window.MPDH.generateKeys();
+                    const myPublicKey = await window.MPDH.getPublicKey();
+                    const myTimestamp = Math.floor(Date.now() / 1000);
+                    const keyMessage = {
+                        type: MESSAGE_TYPES.ECDH_PUBLIC_KEY,
+                        data: {
+                            publicKey: myPublicKey,
+                            timestamp: myTimestamp
+                        }
+                    };
+                    connection.send(JSON.stringify(keyMessage));
+                    window.addMessage('🔑 Sent public key back.', 'system', 'System', 'system');
+                }
+                
+                await window.MPDH.deriveSharedSecret(peerPublicKey);
+                window.addMessage('✅ Secure connection established. Messages are now end-to-end encrypted.', 'system', 'System', 'system');
+
+                // After deriving, get hash and display
+                const verificationHash = await window.MPDH.getSharedKeyHash(peerTimestamp);
+                window.addMessage(`🔒 Key verification code: ${verificationHash}`, 'system', 'System', 'system');
+                window.addMessage(`To ensure security, verify this code matches the one displayed for the other user.`, 'system', 'System', 'system');
+                break;
+
             case MESSAGE_TYPES.ENCRYPTED:
                 // Handle encrypted messages
                 try {
@@ -233,7 +232,7 @@ class PeerFuncs {
 
             case MESSAGE_TYPES.TEXT:
                 // Display text message with verified sender info
-                const messagePrefix = isDecrypted ? '🔒 ' : '🔓 ';
+                const messagePrefix = isDecrypted ? '' : '🔓 ';
                 window.addMessage && window.addMessage(
                     messagePrefix + content, 
                     verifiedSenderId, 
@@ -335,18 +334,6 @@ class PeerFuncs {
                 );
                 break;
                 
-            case MESSAGE_TYPES.PUBLIC_KEY:
-                // Legacy 2-party key exchange - still supported for backward compatibility
-                const receivedPubKey = data.publicKey;
-                const receivedPubKeyRepresentation = BigInt(receivedPubKey).toString(16).slice(0, 16);
-                window.addMessage(`Received public key: ${receivedPubKeyRepresentation}...`, 'System', 'system', 'system');
-
-                finalKey = modularExponentiation(BigInt(receivedPubKey), BigInt(myPrivateKey), BigInt(primeMod));
-                const finalKeyRepresentation = finalKey.toString(16).slice(0, 16);
-                window.addMessage(`Computed shared secret key: ${finalKeyRepresentation}...`, 'System', 'system', 'system');
-                window.addMessage('Key exchange complete! To verify integrity, compare the final key with the other party.', 'System', 'system', 'system');
-                break;
-                
             default:
                 console.warn('Unknown message type:', type);
         }
@@ -354,47 +341,38 @@ class PeerFuncs {
 
     // Decrypt message function
     async decryptMessage(encryptedMessageData) {
-        if (!finalKey) {
+        if (!window.MPDH || !window.MPDH.hasSharedKey()) {
             throw new Error('Shared secret key not established yet');
         }
 
         const { iv, data } = encryptedMessageData;
         
         try {
-            // Create key hash from finalKey
-            const keyBuffer = new TextEncoder().encode(finalKey.toString());
-            const keyHashBuffer = await crypto.subtle.digest('SHA-256', keyBuffer);
-            
-            // Import the hash as AES key (first 32 bytes for AES-256)
-            const aesKey = await crypto.subtle.importKey(
-                'raw',
-                keyHashBuffer.slice(0, 32),
-                { name: 'AES-GCM' },
-                false,
-                ['decrypt'] // Changed to decrypt
-            );
-            
-            // Convert arrays back to Uint8Array
-            const ivArray = new Uint8Array(iv);
-            const encryptedArray = new Uint8Array(data);
-            
-            // Decrypt the message
-            const decryptedBuffer = await crypto.subtle.decrypt(
-                { name: 'AES-GCM', iv: ivArray },
-                aesKey,
-                encryptedArray
-            );
-            
-            // Convert back to JSON
-            const decryptedString = new TextDecoder().decode(decryptedBuffer);
+            const decryptedString = await window.MPDH.decrypt(data, iv);
             const decryptedMessageData = JSON.parse(decryptedString);
-            
             return decryptedMessageData;
-            
         } catch (error) {
             console.error('Decryption error:', error);
             throw new Error(`Decryption failed: ${error.message}`);
         }
+    }
+
+    // Key Exchange
+    async initiateKeyExchange(conn) {
+        window.addMessage('🔄 Initiating secure key exchange...', 'system', 'System', 'system');
+        await window.MPDH.generateKeys();
+        const publicKey = await window.MPDH.getPublicKey();
+        const timestamp = Math.floor(Date.now() / 1000); // Timestamp in seconds
+
+        const keyMessage = {
+            type: MESSAGE_TYPES.ECDH_PUBLIC_KEY,
+            data: {
+                publicKey: publicKey,
+                timestamp: timestamp
+            }
+        };
+        conn.send(JSON.stringify(keyMessage));
+        window.addMessage('🔑 Sent public key.', 'system', 'System', 'system');
     }
 
     // Legacy support for old text-only messages
@@ -415,26 +393,6 @@ class PeerFuncs {
         // Convert to JSON format and broadcast with verified sender info
         const jsonMessage = this.createTextMessage(rawData, verifiedSenderId, verifiedSenderName);
         this.broadcastMessage(jsonMessage, connection.peer);
-    }
-
-    // 2-party key exchange method
-    initiateKeyExchange() {
-        // For 2-party exchange, simply send our public key
-        const keyExchangeMessage = createKeyExchangeMessage();
-        this.broadcastMessage(keyExchangeMessage);
-        
-        window.addMessage && window.addMessage(
-            '🔄 Initiating Diffie Hellman key exchange...', 
-            'system', 'System', 'system'
-        );
-        window.addMessage && window.addMessage(
-            'DH is a key exchange protocol that allows two parties to establish a shared secret over an insecure channel. No one, not even me, can read your messages', 
-            'system', 'System', 'system'
-        );
-        window.addMessage && window.addMessage(
-            'When you leave this tab, all messages will be gone forever.',
-            'system', 'System', 'system'
-        );
     }
 
     createTextMessage(content) {
@@ -517,7 +475,7 @@ class PeerFuncs {
             window.addUser && window.addUser(peerId, true); // Add host
             window.addUser && window.addUser(window.myId, false); // Add self
 
-            this.initiateKeyExchange();
+            this.initiateKeyExchange(conn);
 
             conn.on('data', async rawData => {
                 try {
@@ -565,66 +523,29 @@ class PeerFuncs {
         // If no connections are left, update status
         if (connections.length === 0) {
             window.setConnectionStatus && window.setConnectionStatus(false);
-            finalKey = null; // Reset key
             this.sendSystemMessage("All users have disconnected.");
         }
     }
 
     // Broadcast JSON message to all connections except sender
     async broadcastMessage(messageData, senderPeer = null) {
-        // Check if this is a key exchange message that should be sent unencrypted
-        const isKeyExchangeMessage = messageData.type === MESSAGE_TYPES.PUBLIC_KEY;
-        
-        // If no shared key and it's not a key exchange message, refuse to send
-        if (!finalKey && !isKeyExchangeMessage) {
-            console.warn('No shared key available for encryption. Cannot send non-key-exchange message.');
+        // If no shared key, refuse to send
+        if (!window.MPDH || !window.MPDH.hasSharedKey()) {
+            console.warn('No shared key available for encryption. Cannot send message.');
             window.notify && window.notify('No shared key available for encryption', 3000, 'warning');
             return;
         }
-        
-        // Key exchange messages are sent unencrypted to establish the shared key
-        if (isKeyExchangeMessage) {
-            const jsonString = JSON.stringify(messageData);
-            for (let conn of connections) {
-                if (conn && conn.open && conn.peer !== senderPeer) {
-                    conn.send(jsonString);
-                }
-            }
-            return;
-        }
 
-        // All other messages must be encrypted
+        // All messages must be encrypted
         try {
-            // Create key hash from finalKey
-            const keyBuffer = new TextEncoder().encode(finalKey.toString());
-            const keyHashBuffer = await crypto.subtle.digest('SHA-256', keyBuffer);
+            const { encryptedData, iv } = await window.MPDH.encrypt(JSON.stringify(messageData));
             
-            // Import the hash as AES key (first 32 bytes for AES-256)
-            const aesKey = await crypto.subtle.importKey(
-                'raw',
-                keyHashBuffer.slice(0, 32),
-                { name: 'AES-GCM' },
-                false,
-                ['encrypt']
-            );
-            
-            // Encrypt the message
-            const jsonString = JSON.stringify(messageData);
-            const messageBuffer = new TextEncoder().encode(jsonString);
-            const iv = crypto.getRandomValues(new Uint8Array(12)); // 12 bytes for GCM
-            
-            const encryptedBuffer = await crypto.subtle.encrypt(
-                { name: 'AES-GCM', iv: iv },
-                aesKey,
-                messageBuffer
-            );
-            
-            // Create encrypted message payload without sender info in outer envelope
+            // Create encrypted message payload
             const encryptedPayload = {
                 type: MESSAGE_TYPES.ENCRYPTED,
                 timestamp: Date.now(),
-                iv: Array.from(iv),
-                data: Array.from(new Uint8Array(encryptedBuffer))
+                iv: iv,
+                data: encryptedData
             };
             
             // Broadcast encrypted message
@@ -646,7 +567,7 @@ class PeerFuncs {
             return;
         }
 
-        if (!finalKey) {
+        if (!window.MPDH || !window.MPDH.hasSharedKey()) {
             window.notify && window.notify('Shared secret key not established yet. Your messages will not be encrypted. Please wait for key exchange to complete', 3000, 'warning');
             return;
         }
@@ -666,7 +587,7 @@ class PeerFuncs {
             return;
         }
 
-        if (!finalKey) {
+        if (!window.MPDH || !window.MPDH.hasSharedKey()) {
             window.notify && window.notify('Shared secret key not established yet. Media will not be encrypted. Please wait for key exchange to complete', 3000, 'warning');
             return;
         }

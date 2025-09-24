@@ -68,7 +68,14 @@ function ChatMessage({
               src={message.mediaData.base64Data} 
               alt={message.mediaData.filename}
               className="responsive-media"
-              onClick={() => window.open(message.mediaData.base64Data, '_blank')}
+              onClick={() => {
+                if (window.openImageOverlay) {
+                  window.openImageOverlay({
+                    src: message.mediaData.base64Data,
+                    filename: message.mediaData.filename
+                  });
+                }
+              }}
               title={`${message.mediaData.filename} (${(message.mediaData.size / 1024 / 1024).toFixed(2)} MB)`}
             />
             <button
@@ -184,6 +191,51 @@ function ChatMessage({
     </div>
   );
 }
+
+// Simple overlay container attached to body root via portal-like global helpers
+(function initImageOverlayHelpers(){
+  if (window.__imageOverlayInitialized) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'image-overlay';
+  overlay.innerHTML = `
+    <div class="overlay-content">
+      <img alt="preview" />
+      <div class="overlay-actions">
+        <button class="overlay-btn" data-action="download"><i class="fas fa-download"></i> Save</button>
+        <button class="overlay-btn" data-action="close"><i class="fas fa-times"></i> Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const img = overlay.querySelector('img');
+  const btnDownload = overlay.querySelector('[data-action="download"]');
+  const btnClose = overlay.querySelector('[data-action="close"]');
+
+  function openImageOverlay({src, filename}){
+    img.src = src;
+    img.dataset.filename = filename || 'image';
+    overlay.classList.add('open');
+  }
+  function closeImageOverlay(){
+    overlay.classList.remove('open');
+    img.src = '';
+    delete img.dataset.filename;
+  }
+  overlay.addEventListener('click', (e)=>{
+    if (e.target === overlay) closeImageOverlay();
+  });
+  btnClose.addEventListener('click', closeImageOverlay);
+  btnDownload.addEventListener('click', ()=>{
+    const a = document.createElement('a');
+    a.href = img.src;
+    a.download = img.dataset.filename || 'image';
+    a.click();
+  });
+
+  window.openImageOverlay = openImageOverlay;
+  window.closeImageOverlay = closeImageOverlay;
+  window.__imageOverlayInitialized = true;
+})();
 
 // ChatDemo Component - Example of how to use the components together
 function ChatDemo() {
