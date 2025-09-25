@@ -450,14 +450,12 @@ function App() {
                 {roomId || 'Loading...'}
               </h3>
             </div>
-            <div className="header-right">
-              <div className="connection-status">
-                {isConnected ? (
-                  <span className="connected"><i className="fas fa-circle"></i>  Online</span>
-                ) : (
-                  <span className="disconnected"><i className="fas fa-circle"></i>  Offline</span>
-                )}
-              </div>
+            <div className="connection-status">
+              {isConnected ? (
+                <span className="connected"><i className="fas fa-circle"></i>  Online</span>
+              ) : (
+                <span className="disconnected"><i className="fas fa-circle"></i>  Offline</span>
+              )}
             </div>
           </div>
           <div className="chat-messages-desktop">

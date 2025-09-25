@@ -41,6 +41,7 @@
   --radius-pill: 0.5px;
   --shadow-soft: 0 8px 24px rgba(15, 20, 25, 0.2);
   --shadow-strong: 0 16px 40px rgba(15, 20, 25, 0.28);
+  --connection-status-font: clamp(0.85rem, 1vw, 1rem);
 
   /* chat layout */
   --sidebar-width-min: 18rem;
@@ -130,7 +131,7 @@ body.no-scroll {
 
 .page-header {
   display: grid; /* USE GRID! */
-  grid-template-columns: 1fr auto 1fr; /* Three columns */
+  grid-template-columns: auto auto auto; /* Three columns */
   align-items: center; /* Vertically center items */
   gap: var(--space-md);
   padding-bottom: var(--space-md);
@@ -145,9 +146,6 @@ body.no-scroll {
 }
 
 .back-btn,
-.mobile-menu-btn,
-.mobile-menu-toggle,
-.close-sidebar-btn,
 .send-button,
 .emoji-button,
 .sidebar-btn,
@@ -166,6 +164,30 @@ body.no-scroll {
   transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
   min-height: 2.75rem;
   min-width: 2.75rem;
+}
+
+.mobile-menu-btn,
+.mobile-menu-toggle,
+.close-sidebar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  grid-column: 1;
+  gap: var(--space-xs);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: #fff;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  width: clamp(2.5rem, 3.75vw, 3.4rem);
+  height: clamp(2.5rem, 3.75vw, 3.4rem);
+  padding: var(--space-2xs);
+}
+
+.chat-main-header .mobile-menu-toggle {
+  justify-self: flex-start;
+  align-self: center;
+  width: clamp(2.5rem, 3.75vw, 3.2rem);
+  height: clamp(2.5rem, 3.75vw, 3.2rem);
 }
 
 .back-btn,
@@ -496,7 +518,7 @@ demo-btn,
 
 .chat-main-header {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: auto auto auto;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
@@ -507,10 +529,18 @@ demo-btn,
   flex-shrink: 0;
 }
 
+.chat-main-header .mobile-menu-toggle {
+  justify-self: flex-start;
+  align-self: center;
+  width: auto;
+  max-width: 3.25rem;
+  min-width: 2.5rem;
+}
+
 
 .room-info h3 {
   margin: 0;
-  font-size: clamp(0.7rem, 1vw, 1.4rem);
+  font-size: clamp(1rem, 2.2vw, 4rem);
   font-weight: 600;
   word-break: break-all;
   grid-column: 2;
@@ -521,13 +551,15 @@ demo-btn,
   display: flex;
   align-items: center;
   gap: var(--space-md);
+  justify-self: flex-end;
 }
 
 .connection-status {
   display: flex;
   align-items: center;
   gap: var(--space-2xs);
-  font-size: var(--font-size-xs);
+  font-size: clamp(0.95rem, 1.4vw, 1.35rem);
+  line-height: 1.1;
 }
 
 .connection-status .connected {
