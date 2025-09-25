@@ -14,6 +14,7 @@ function App() {
   const [messages, setMessages] = useState([]); // Chat messages
   const [notifications, setNotifications] = useState([]); // Store active notifications
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false); // Mobile sidebar visibility
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false); // Desktop sidebar collapsed state
 
   // Refs for autoscroll
   const messagesEndRef = useRef(null);
@@ -113,18 +114,30 @@ function App() {
 
   // Mobile sidebar functions
   const toggleMobileSidebar = () => {
-    setIsMobileSidebarOpen(!isMobileSidebarOpen);
+    const isMobile = window.innerWidth <= 1024;
+    if (isMobile) {
+      setIsMobileSidebarOpen(!isMobileSidebarOpen);
+    } else {
+      setIsSidebarCollapsed((prev) => !prev);
+    }
   };
 
   const closeMobileSidebar = () => {
-    setIsMobileSidebarOpen(false);
+    const isMobile = window.innerWidth <= 1024;
+    if (isMobile) {
+      setIsMobileSidebarOpen(false);
+    } else {
+      setIsSidebarCollapsed(true);
+    }
   };
 
   const copyRoomId = () => {
     if (roomId) {
       navigator.clipboard.writeText(roomId);
       notify('Room ID copied to clipboard!', 2000, 'success');
-      closeMobileSidebar();
+      if (window.innerWidth <= 1024) {
+        closeMobileSidebar();
+      }
     }
   };
 
@@ -174,6 +187,8 @@ function App() {
       window.peerInstance.leaveChat();
     }
     setCurrentPage('home');
+    setIsMobileSidebarOpen(false);
+    setIsSidebarCollapsed(false);
   };
 
   // Example of using individual components
@@ -230,6 +245,8 @@ function App() {
       window.peerInstance.hostChat();
       setRoomId(window.myId);
       setIsConnected(false); // Start as not connected, wait for first user
+  setIsMobileSidebarOpen(false);
+  setIsSidebarCollapsed(false);
       clearUserList();
       clearMessages();
       addUser(window.myId, true); // Add host as first user
@@ -243,6 +260,8 @@ function App() {
     if (connectToId.trim() && window.peerInstance) {
       setRoomId(connectToId);
       setIsConnected(false); // Will be set to true when connection succeeds
+  setIsMobileSidebarOpen(false);
+  setIsSidebarCollapsed(false);
       clearUserList();
       clearMessages();
       // Don't add users immediately - wait for successful connection
@@ -362,7 +381,7 @@ function App() {
         <div className="mobile-sidebar-backdrop" onClick={closeMobileSidebar}></div>
       )}
       
-      <div className="chat-container-desktop">
+  <div className={`chat-container-desktop ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <div className={`chat-sidebar ${isMobileSidebarOpen ? 'mobile-open' : ''}`}>
           <div className="sidebar-header">
             <button className="back-btn" onClick={goHome}>
@@ -422,20 +441,21 @@ function App() {
         
         <div className="chat-main">
           <div className="chat-main-header">
-            <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <button className="mobile-menu-toggle" onClick={toggleMobileSidebar} title="Menu" aria-label="Menu">
-                <i className="fas fa-bars"></i>
-              </button>
-              <div className="room-info">
-                <h3>Chat Room: {roomId || 'Loading...'}</h3>
-              </div>
+            <button className="mobile-menu-toggle" onClick={toggleMobileSidebar} title="Menu" aria-label="Menu">
+              <i className="fas fa-bars"></i>
+            </button>
+            <div className="room-info">
+              <h3>Chat Room:
+                <br />
+                {roomId || 'Loading...'}
+              </h3>
             </div>
             <div className="header-right">
               <div className="connection-status">
                 {isConnected ? (
-                  <span className="connected"><i className="fas fa-circle"></i> Connected</span>
+                  <span className="connected"><i className="fas fa-circle"></i>  Online</span>
                 ) : (
-                  <span className="disconnected"><i className="fas fa-circle"></i> Connecting...</span>
+                  <span className="disconnected"><i className="fas fa-circle"></i>  Offline</span>
                 )}
               </div>
             </div>
