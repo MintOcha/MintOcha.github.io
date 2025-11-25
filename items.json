@@ -2,7 +2,7 @@
   {
     "id": "1",
     "name": "Universal scale cleaner (100g)",
-    "price": 2,
+    "price": 2.50,
     "image": "assets/cleaner.jpg",
     "description": "Chemical solution for cleaning bathroom floors, scale on water cooker, etc. Food grade and non toxic (DO NOT DRINK). Mix 1:3 with hot water"
   },
@@ -23,7 +23,7 @@
   {
     "id": "4",
     "name": "Isopropanol (500ml)",
-    "price": 5,
+    "price": 6,
     "image": "assets/IPA.jpg",
     "description": "Isopropyl alcohol for cleaning electronic devices and surfaces."
   },
@@ -71,7 +71,7 @@
   },
   {
     "id": "11",
-    "name": "Hydrogen peroxide 10% (100ml)",
+    "name": "Hydrogen peroxide 10% (50ml)",
     "price": 1.50,
     "image": "assets/peroxide.jpg",
     "description": "10% h2o2. Customisable concentration available on request."
