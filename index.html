@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mint's Chem Shop</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for things Tailwind might not cover perfectly */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .hidden {
+            display: none;
+        }
+        
+        /* Success Animation */
+        @keyframes checkmark {
+            0% { stroke-dashoffset: 100; opacity: 0; }
+            100% { stroke-dashoffset: 0; opacity: 1; }
+        }
+        .animate-path {
+            stroke-dasharray: 100;
+            stroke-dashoffset: 100;
+            animation: checkmark 0.8s ease-in-out forwards 0.2s;
+        }
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop {
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <h1 class="text-xl font-bold text-gray-900 cursor-pointer" onclick="showCatalog()">Mint's Chem Shop</h1>
+            <div class="relative">
+                <button onclick="toggleCart()" id="cart-btn" class="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 text-sm font-medium transition-colors flex items-center gap-2 bg-white">
+                    Cart (<span id="cart-count">0</span>)
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+        
+        <!-- Catalog View -->
+        <div id="catalog-view" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Items will be injected here -->
+            <div class="col-span-full text-center text-gray-500">Loading items...</div>
+        </div>
+
+        <!-- Checkout View -->
+        <div id="checkout-view" class="hidden">
+            <div class="flex flex-col lg:flex-row gap-8">
+                
+                <!-- Left: Cart Items -->
+                <div class="w-full lg:w-1/2 bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                    <h2 class="text-2xl font-semibold mb-4">Your Cart</h2>
+                    <div id="cart-items-container" class="space-y-4">
+                        <!-- Cart items injected here -->
+                        <p class="text-gray-500">Your cart is empty.</p>
+                    </div>
+                    <div class="mt-6 pt-6 border-t border-gray-200 flex justify-between items-center">
+                        <span class="text-lg font-medium">Total Items:</span>
+                        <span class="text-xl font-bold" id="cart-total-count">0</span>
+                    </div>
+                </div>
+
+                <!-- Right: Checkout Form -->
+                <div class="w-full lg:w-1/2 bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                    <h2 class="text-2xl font-semibold mb-4">Checkout Details</h2>
+                    <form id="checkout-form" class="space-y-4" onsubmit="handleCheckout(event)">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <label for="firstName" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">First Name</label>
+                                <input id="firstName" name="firstName" required placeholder="John" class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                            </div>
+                            <div class="space-y-2">
+                                <label for="lastName" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Last Name</label>
+                                <input id="lastName" name="lastName" required placeholder="Doe" class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                            </div>
+                        </div>
+
+                        <div class="space-y-2">
+                            <label for="class" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Class</label>
+                            <input id="class" name="class" required placeholder="e.g. 10A" class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <label for="whenPickup" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">When Pickup</label>
+                                <input id="whenPickup" name="whenPickup" required placeholder="e.g. Tomorrow Lunch" class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                            </div>
+                            <div class="space-y-2">
+                                <label for="whereMeetup" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Where Meetup</label>
+                                <input id="whereMeetup" name="whereMeetup" required placeholder="e.g. Canteen" class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                            </div>
+                        </div>
+
+                        <div class="space-y-2">
+                            <label for="whatsapp" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">WhatsApp Number</label>
+                            <input id="whatsapp" name="whatsapp" type="tel" required placeholder="+1234567890" class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                        </div>
+
+                        <div class="pt-4">
+                            <button type="submit" class="w-full px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800 text-sm font-medium transition-colors disabled:opacity-50">Place Order</button>
+                        </div>
+                        
+                        <p class="text-xs text-gray-500 text-center mt-2">Payment is face-to-face upon pickup.</p>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Success Overlay -->
+    <div id="success-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-8 rounded-lg shadow-lg text-center transform transition-all scale-100 animate-pop">
+            <div class="w-16 h-16 mx-auto mb-4 text-green-500">
+                <svg class="w-full h-full" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                    <circle cx="26" cy="26" r="25" fill="none" stroke="currentColor" stroke-width="2"/>
+                    <path class="animate-path" fill="none" stroke="currentColor" stroke-width="5" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-900 mb-2">Order Placed!</h2>
+            <p class="text-gray-600">Thank you for your order.</p>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

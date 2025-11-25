@@ -1,0 +1,79 @@
+[
+  {
+    "id": "1",
+    "name": "Universal scale cleaner (100g)",
+    "price": 2,
+    "image": "assets/cleaner.jpg",
+    "description": "Chemical solution for cleaning bathroom floors, scale on water cooker, etc. Food grade and non toxic (DO NOT DRINK). Mix 1:3 with hot water"
+  },
+  {
+    "id": "2",
+    "name": "Oleophobic Coating (Phone)",
+    "price": 1,
+    "image": "assets/oleophobic.jpg",
+    "description": "Restores fingerprint resistance, smoothness and water repellency. Only purchase if water sticks to your screen. Lasts up to 6 months."
+  },
+  {
+    "id": "3",
+    "name": "Oleophobic Coating (Tablet)",
+    "price": 2,
+    "image": "assets/oleophobic.jpg",
+    "description": "Restores fingerprint resistance, smoothness and water repellency. Only purchase if water sticks to your screen. Lasts up to 6 months."
+  },
+  {
+    "id": "4",
+    "name": "Isopropanol (500ml)",
+    "price": 5,
+    "image": "assets/IPA.jpg",
+    "description": "Isopropyl alcohol for cleaning electronic devices and surfaces."
+  },
+  {
+    "id": "5",
+    "name": "Spray bottle (50ml)",
+    "price": 1,
+    "image": "assets/spray50.jpg",
+    "description": "Plastic spray bottle to hold chemicals"
+  },
+   {
+    "id": "6",
+    "name": "Spray bottle (100ml)",
+    "price": 1.40,
+    "image": "assets/spray100.jpg",
+    "description": "Plastic spray bottle to hold chemicals (larger)"
+  },
+  {
+    "id": "7",
+    "name": "Citric acid (100g)",
+    "price": 2,
+    "image": "assets/citric.jpg",
+    "description": "Citric acid for various uses."
+  },
+  {
+    "id": "8",
+    "name": "Benedicts solution (50ml)",
+    "price": 2,
+    "image": "assets/benedicts.png",
+    "description": "Test solution for detecting reducing sugars."
+  },
+  {
+    "id": "9",
+    "name": "Sulfuric acid 20% w/w (50ml)",
+    "price": 1.40,
+    "image": "assets/sulfuric.jpg",
+    "description": "Dilute sulfuric acid for chemical experiments."
+  },
+  {
+    "id": "10",
+    "name": "DEET Insect Repellent (70ml)",
+    "price": 2.40,
+    "image": "assets/DEET.jpg",
+    "description": "99% pure DEET insect repellent for outdoor use. Dilute with water before use."
+  },
+  {
+    "id": "11",
+    "name": "Hydrogen peroxide 10% (100ml)",
+    "price": 1.50,
+    "image": "assets/peroxide.jpg",
+    "description": "10% h2o2. Customisable concentration available on request."
+  }
+]
