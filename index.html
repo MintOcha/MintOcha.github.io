@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080b12">
+  <title>TI-84 Test Mode Exit</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div class="eyebrow">LOCAL WEBUSB UTILITY</div>
+      <h1>Exit TI-84 Plus CE<br><span>test mode.</span></h1>
+      <p class="lede">Connect your calculator by USB, then send a harmless variable to restore normal mode. Everything runs locally in Chrome.</p>
+
+      <div class="panel">
+        <div class="device-row">
+          <div class="device-icon" aria-hidden="true">
+            <span>TI</span>
+            <i></i><i></i><i></i>
+          </div>
+          <div>
+            <strong id="device-name">No calculator selected</strong>
+            <span id="device-detail">TI-84 Plus CE / CE Python</span>
+          </div>
+          <span id="status-badge" class="badge idle">Waiting</span>
+        </div>
+
+        <button id="connect-button" type="button">
+          <span>Connect calculator</span>
+          <b aria-hidden="true">→</b>
+        </button>
+
+        <ol class="steps" aria-label="Progress">
+          <li id="step-connect"><i>1</i><span>Connect over USB</span></li>
+          <li id="step-ready"><i>2</i><span>Verify calculator</span></li>
+          <li id="step-send"><i>3</i><span>Send exit signal</span></li>
+        </ol>
+
+        <div id="message" class="message" role="status" aria-live="polite">
+          Use desktop Chrome or Edge. The browser will ask you to choose your calculator.
+        </div>
+      </div>
+
+      <p class="privacy">No upload. No account. No calculator files are read.</p>
+    </section>
+
+    <aside class="calculator-art" aria-hidden="true">
+      <div class="glow"></div>
+      <div class="calculator">
+        <div class="brand">TEXAS INSTRUMENTS</div>
+        <div class="model">TI-84 Plus CE</div>
+        <div class="screen">
+          <small>PRESS-TO-TEST</small>
+          <strong id="art-status">READY</strong>
+          <div class="screen-line"></div>
+          <span>Connect USB to continue</span>
+        </div>
+        <div class="keys">
+          <i></i><i></i><i></i><i></i><i></i>
+          <i></i><i></i><i></i><i></i><i></i>
+          <i></i><i></i><i></i><i></i><i></i>
+          <i></i><i></i><i></i><i></i><i></i>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="vendor/ticalc-usb.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
