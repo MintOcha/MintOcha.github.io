@@ -234,7 +234,7 @@ async function load(input: Replay): Promise<Loaded> {
   for (const line of input.inputlog.split("\n")) {
     if (!line.trim() || line.startsWith(">version") || line.startsWith(">chat"))
       continue;
-    if (!/^>(start|player|p1|p2|forcewin|forcetie|tiebreak) /.test(line))
+    if (!/^>(start|player|p1|p2|forcewin|forcelose|forcetie|tiebreak)(?: |$)/.test(line))
       continue;
     const choice = /^>(p[12]) (.+)$/.exec(line);
     if (choice) {
