@@ -934,7 +934,7 @@ function App() {
                               : matrix.opponentMoveValues[i]
                             : undefined
                         }
-                        assessment={matrix?.opponentGrades[i]}
+                        assessment={row === null ? matrix?.opponentGrades[i] : undefined}
                         onClick={() => chooseAction(col === i ? null : i, true)}
                       />
                     )}
