@@ -27,6 +27,8 @@ export interface PokemonView {
   types: string[];
   moves: string[];
   item: string;
+  teraType?: string;
+  stats?: Record<string, number>;
   ability: string;
 }
 export interface PositionView {
@@ -48,6 +50,8 @@ export interface Matrix {
   rows: Action[];
   columns: Action[];
   values: number[][];
+  moveValues: number[];
+  opponentMoveValues: number[];
   counts: number[][];
   grades: {
     label: string;
@@ -81,6 +85,7 @@ export interface AnalysisPoint {
   approximate?: boolean;
   index: number;
   turn: number;
+  events?: string[];
   value: number;
   luck: number | null;
   regret: number | null;

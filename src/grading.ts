@@ -12,14 +12,14 @@ export const BRILLIANT = {
 // A product convention, not a claim of human creativity or information-fair play.
 export function classifyMoves(
   values: number[],
-  equilibrium: number,
+  bestValue: number,
   sacrifice: number[],
 ) {
   const safe = values.filter(
     (_, i) => sacrifice[i] <= BRILLIANT.maximumSafeSacrificeChance,
   );
   return values.map((value, i) => {
-    const regret = Math.max(0, equilibrium - value);
+    const regret = Math.max(0, bestValue - value);
     const brilliant =
       regret < BRILLIANT.maximumRegret &&
       sacrifice[i] >= BRILLIANT.minimumSacrificeChance &&
@@ -32,11 +32,11 @@ export function classifyMoves(
           label: "Brilliant",
           symbol: "!!",
           className: "brilliant",
-          reason: `At least ${(sacrifice[i] * 100).toFixed(1)}% chance of losing a Pokémon this step, while preserving ${(value * 100).toFixed(1)}% expected win value and outperforming every low-sacrifice alternative by at least ${((value - Math.max(...safe)) * 100).toFixed(1)} pp against the same equilibrium defense.`,
+          reason: `${(sacrifice[i] * 100).toFixed(1)}% sacrifice rate with ${(value * 100).toFixed(1)}% win value, ${((value - Math.max(...safe)) * 100).toFixed(1)} pp above safer alternatives.`,
         }
       : {
           ...grade(regret),
-          reason: `${(regret * 100).toFixed(1)} pp expected win value lost against the equilibrium defense.`,
+          reason: `${(regret * 100).toFixed(1)} pp below the best available move.`,
         };
   });
 }

@@ -49,10 +49,14 @@ export function solveMatrix(matrix: number[][]) {
     matrix.reduce((sum, row, i) => sum + p[i] * row[j], 0),
   );
   const value = rowValues.reduce((sum, x, i) => sum + p[i] * x, 0);
+  const worstValues = matrix.map((row) => Math.min(...row));
+  const safestValue = Math.max(...worstValues);
   return {
     p,
     q,
-    best: p.indexOf(Math.max(...p)),
+    best: worstValues.indexOf(safestValue),
+    worstValues,
+    safestValue,
     value,
     exploitability: Math.max(...rowValues) - Math.min(...colValues),
     rowValues,

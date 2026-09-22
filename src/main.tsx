@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Sprites } from "@pkmn/img";
+import { Sprites, Icons } from "@pkmn/img";
+import Battlefield from "./Battlefield";
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,6 +12,8 @@ import {
   Info,
   RotateCcw,
   Play,
+  Pause,
+  ArrowLeftRight,
   Square,
   ExternalLink,
   Check,
@@ -28,7 +31,6 @@ import type {
   AnalysisPoint,
   Branch,
   Replay,
-  PokemonView,
 } from "./types";
 import { GRADES, grade, percent, points } from "./types";
 import "./style.css";
@@ -60,27 +62,46 @@ worker.addEventListener("message", ({ data }) => {
     else promise?.resolve(data.result);
   }
 });
-function Sprite({
-  mon,
-  back = false,
-  small = false,
+function GradeIcon({
+  assessment,
 }: {
-  mon: PokemonView;
-  back?: boolean;
-  small?: boolean;
+  assessment: { label: string; className: string; symbol: string };
 }) {
-  const image = Sprites.getPokemon(mon.species, {
-    gen: "gen5",
-    side: back ? "p1" : "p2",
-  });
-  return (
+  return assessment.className === "neutral" ? (
+    <span className="grade-icon">{assessment.symbol}</span>
+  ) : (
     <img
-      className={`sprite ${small ? "small" : ""} ${mon.fainted ? "fainted" : ""}`}
-      src={image.url}
-      alt={mon.species}
-      style={{ imageRendering: image.pixelated ? "pixelated" : "auto" }}
+      className="grade-icon"
+      src={`/icons/${assessment.className}.png`}
+      alt={assessment.label}
     />
   );
+}
+
+function eventSummary(events: string[]) {
+  const labels: string[] = [];
+  let move = "";
+  const name = (ident: string = "") => ident.split(": ").slice(1).join(": ");
+  for (const event of events) {
+    const [, kind, actor, effect] = event.split("|");
+    if (kind === "move") move = `${name(actor)} · ${effect}`;
+    if (kind === "-crit") labels.push(`${move} · critical hit`);
+    if (kind === "-miss") labels.push(`${move} · missed`);
+    if (kind === "cant")
+      labels.push(
+        `${name(actor)} · ${effect === "par" ? "fully paralyzed" : effect === "slp" ? "asleep" : effect === "frz" ? "frozen" : effect === "flinch" ? "flinched" : effect}`,
+      );
+    if (kind === "-status") labels.push(`${name(actor)} · ${effect}`);
+  }
+  return labels.length
+    ? [...new Set(labels)].join("; ")
+    : events
+        .filter((event) => event.startsWith("|move|"))
+        .map((event) => {
+          const [, , actor, move] = event.split("|");
+          return `${name(actor)} · ${move}`;
+        })
+        .join(" / ");
 }
 function ActionButton({
   action,
@@ -103,13 +124,19 @@ function ActionButton({
 }) {
   return (
     <button
-      className={`action type-${action.type.toLowerCase()} ${selected ? "selected" : ""} ${best ? "best-response" : ""}`}
+      className={`action ${action.kind === "switch" ? "switch-action" : `type-${action.type.toLowerCase()}`} ${played ? "played" : ""} ${selected ? "selected" : ""} ${best ? "best-response" : ""}`}
       onClick={onClick}
       aria-pressed={selected}
-      title={`${action.label}${best ? " — best response" : ""}`}
+      title={`${action.label}${assessment ? ` · ${assessment.label}` : ""}${regret !== undefined ? ` · −${(regret * 100).toFixed(1)} pp` : ""}`}
     >
       <span className="action-name">
-        {action.kind === "switch" ? "↪ " : ""}
+        {action.kind === "switch" && (
+          <span
+            className="switch-icon"
+            style={Icons.getPokemon(action.label).css}
+            aria-hidden="true"
+          />
+        )}
         {action.label}
         {action.tera && <span className="tera"> Tera</span>}
       </span>
@@ -119,24 +146,92 @@ function ActionButton({
           : action.kind === "switch"
             ? "Switch"
             : "No choice"}
-        {played && " · played"}
+        {played && <span className="played-label">Played</span>}
         <b>
-          {best ? "★ " : ""}
+          {assessment && <GradeIcon assessment={assessment} />}
           {value !== undefined ? percent(value) : ""}
         </b>
       </span>
-      {regret !== undefined && (
-        <span
-          title={assessment?.reason}
-          className={`action-detail ${(assessment || grade(regret)).className}`}
-        >
-          {(assessment || grade(regret)).label} · {(regret * 100).toFixed(1)} pp
-          lost vs equilibrium
-        </span>
-      )}
     </button>
   );
 }
+function ActionChoices({
+  actions,
+  selected,
+  onSelect,
+  className,
+  suggested,
+  ended,
+  children,
+}: {
+  actions: Action[];
+  selected: number | null;
+  onSelect: (index: number | null) => void;
+  className: string;
+  children: (action: Action, index: number) => React.ReactNode;
+  suggested?: number;
+  ended?: boolean;
+}) {
+  const [tera, setTera] = useState<boolean | null>(null);
+  useEffect(() => setTera(null), [suggested]);
+  const choice = selected === null ? undefined : actions[selected];
+  const available = actions.some((action) => action.tera);
+  const checked =
+    available &&
+    (choice?.kind === "move"
+      ? !!choice.tera
+      : (tera ?? (suggested !== undefined && !!actions[suggested]?.tera)));
+  if (actions.length === 1 && actions[0].kind === "pass")
+    return (
+      <p className="note">
+        {ended
+          ? "Battle ended."
+          : "Waiting for the other player’s replacement."}
+      </p>
+    );
+  return (
+    <>
+      {available && (
+        <label className="tera-choice">
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={(event) => {
+              const enabled = event.target.checked;
+              setTera(enabled);
+              if (choice?.kind === "move") {
+                const id = choice.id.replace(/ terastallize$/, "");
+                const index = actions.findIndex(
+                  (action) =>
+                    action.id === `${id}${enabled ? " terastallize" : ""}`,
+                );
+                onSelect(index < 0 ? null : index);
+              }
+            }}
+          />
+          Terastallize
+        </label>
+      )}
+      <div className={className}>
+        <div className="move-buttons">
+          {actions.map((action, index) =>
+            action.kind === "move" && !!action.tera === checked
+              ? children(action, index)
+              : null,
+          )}
+        </div>
+        {actions.some((action) => action.kind === "switch") && (
+          <div className="switch-buttons" aria-label="Switch Pokémon">
+            {actions.map((action, index) =>
+              action.kind === "switch" ? children(action, index) : null,
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 function App() {
   const [link, setLink] = useState("");
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -145,6 +240,10 @@ function App() {
   const [side, setSide] = useState<Side>(0);
   const [oracle, setOracle] = useState(true);
   const [positionValue, setPositionValue] = useState<number | null>(null);
+  const [battleLog, setBattleLog] = useState("");
+  const [playing, setPlaying] = useState(false);
+  const [settled, setSettled] = useState<number | null>(null);
+  const logElement = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState("");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
@@ -168,7 +267,10 @@ function App() {
         setError(`Local critic failed to load: ${error.message}`),
       );
     const listener = ({ data }: MessageEvent) => {
-      if (data.type === "estimate") setMatrix(data.matrix);
+      if (data.type === "estimate") {
+        setMatrix(data.matrix);
+        if (!data.matrix.provisional) setPositionValue(data.matrix.value);
+      }
       if (data.type === "progress") {
         setProgress(data.progress);
         setBusy(data.text);
@@ -183,7 +285,61 @@ function App() {
     worker.addEventListener("message", listener);
     return () => worker.removeEventListener("message", listener);
   }, []);
+  useEffect(() => {
+    const element = logElement.current;
+    if (element) element.scrollTop = element.scrollHeight;
+  }, [battleLog]);
+  useEffect(() => {
+    if (!playing || busy || !position || !loaded || settled !== position.index)
+      return;
+    if (position.index >= loaded.positions.length) {
+      setPlaying(false);
+      return;
+    }
+    void review(Math.max(0, position.index + 1), side, oracle, true);
+  }, [playing, busy, position, loaded, settled]);
+  useEffect(() => {
+    const navigate = (event: KeyboardEvent) => {
+      if (
+        !loaded ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        (event.target instanceof Element &&
+          event.target.closest(
+            'input, select, textarea, button, [contenteditable="true"]',
+          ))
+      )
+        return;
+      if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        void review(
+          Math.max(
+            0,
+            Math.min(
+              loaded.positions.length,
+              (position?.index ?? 0) + (event.key === "ArrowRight" ? 1 : -1),
+            ),
+          ),
+        );
+      } else if (event.code === "Space") {
+        event.preventDefault();
+        setPlaying((value) => !value);
+      }
+    };
+    window.addEventListener("keydown", navigate);
+    return () => window.removeEventListener("keydown", navigate);
+  }, [loaded, position, side, oracle]);
+  function switchSide(next: Side) {
+    setPlaying(false);
+    setSide(next);
+    setTimeline([]);
+    setBranches([]);
+    void review(Math.max(0, position?.index ?? 0), next, oracle);
+  }
   async function openReplay(replay: Replay) {
+    setPlaying(false);
+    setSettled(null);
     reviewingBattle.current = true;
     setError("");
     setBusy("Reconstructing replay in your browser…");
@@ -201,7 +357,11 @@ function App() {
       setRow(null);
       setCol(null);
       setPositionValue(
-        await call<number>("evaluation", { index: 0, perspective: 0 }),
+        await call<number>("evaluation", {
+          index: 0,
+          perspective: 0,
+          oracle: true,
+        }),
       );
       setBusy("Analysing replay positions…");
       const overview = await call<AnalysisPoint[]>("overview", {
@@ -249,7 +409,14 @@ function App() {
     }
     return token;
   }
-  async function review(index: number, perspective = side, reveal = oracle) {
+  async function review(
+    index: number,
+    perspective = side,
+    reveal = oracle,
+    autoplay = false,
+  ) {
+    if (!autoplay) setPlaying(false);
+    setSettled(null);
     const token = await interruptReview();
     if (token !== latest.current) return;
     setError("");
@@ -260,6 +427,25 @@ function App() {
     setMatrix(null);
     setPositionValue(null);
     if (index >= 0) setReplayIndex(index);
+    if (loaded && index === loaded.positions.length) {
+      setPosition({
+        ...loaded.positions.at(-1)!,
+        index,
+        phase: "ended",
+        log: loaded.replay.log.split("\n"),
+        actions: [[], []],
+        played: [],
+      });
+      setPositionValue(
+        loaded.outcome
+          ? perspective === 0
+            ? loaded.outcome.value
+            : 1 - loaded.outcome.value
+          : null,
+      );
+      setBusy("");
+      return;
+    }
     try {
       const view = await call<PositionView>("view", {
         index,
@@ -271,6 +457,7 @@ function App() {
       const evaluation = await call<number>("evaluation", {
         index,
         perspective,
+        oracle: reveal,
       });
       if (token !== latest.current) return;
       setPositionValue(evaluation);
@@ -289,6 +476,7 @@ function App() {
       });
       if (token !== latest.current) return;
       setMatrix(result);
+      setPositionValue(result.value);
       if (index >= 0)
         setTimeline((old) =>
           [
@@ -304,6 +492,7 @@ function App() {
               opponentRegret: result.opponentRegret,
               grade: result.grades[result.played[0]]?.label,
               opponentGrade: result.opponentGrades[result.played[1]]?.label,
+              events: result.events,
             },
           ].sort((a, b) => a.index - b.index),
         );
@@ -329,7 +518,24 @@ function App() {
       setBusy("");
     }
   }
+  function chooseAction(index: number | null, opponentChoice = false) {
+    if (
+      !matrix ||
+      matrix.provisional ||
+      (matrix.rows[0]?.kind === "pass" && matrix.columns[0]?.kind === "pass") ||
+      (!!busy && !reviewingBattle.current)
+    )
+      return;
+    const nextRow = opponentChoice ? row : index;
+    const nextCol = opponentChoice ? index : col;
+    setRow(nextRow);
+    setCol(nextCol);
+    const r = nextRow ?? (matrix.rows[0]?.kind === "pass" ? 0 : null);
+    const c = nextCol ?? (matrix.columns[0]?.kind === "pass" ? 0 : null);
+    if (r !== null && c !== null) void continueLine({ row: r, col: c });
+  }
   async function continueLine(pair?: { row: number; col: number }) {
+    setPlaying(false);
     if (!matrix || matrix.provisional || !position) return;
     const r =
       pair?.row ??
@@ -359,8 +565,8 @@ function App() {
       });
       if (token !== latest.current) return;
       setBranches((old) => [...old, branch]);
-      setTab("line");
-      if (token === latest.current) setBusy("");
+      setTab("review");
+      await review(branch.view.index);
     } catch (e) {
       if ((e as Error).message !== "Analysis cancelled")
         setError((e as Error).message);
@@ -407,7 +613,9 @@ function App() {
     : 0;
   const bestCol = matrix
     ? row === null
-      ? matrix.q.indexOf(Math.max(...matrix.q))
+      ? matrix.opponentMoveValues.indexOf(
+          Math.max(...matrix.opponentMoveValues),
+        )
       : matrix.values[row].indexOf(Math.min(...matrix.values[row]))
     : 0;
   const selectedValue = matrix
@@ -416,14 +624,10 @@ function App() {
       : col !== null
         ? Math.max(...matrix.values.map((v) => v[col]))
         : row !== null
-          ? matrix.values[row].reduce((sum, v, j) => sum + v * matrix.q[j], 0)
+          ? matrix.moveValues[row]
           : matrix.value
     : (timeline.find((point) => point.index === position?.index)?.value ??
       null);
-  const advantage = (value: number) => {
-    const score = Number((200 * value - 100).toFixed(2));
-    return `${score > 0 ? "+" : ""}${score.toFixed(2)}`;
-  };
   const topLines =
     matrix && !matrix.provisional
       ? matrix.rows
@@ -435,24 +639,28 @@ function App() {
               row,
               col,
               value: values[col],
-              strategyValue: values.reduce(
-                (sum, value, j) => sum + value * matrix.q[j],
-                0,
-              ),
             };
           })
           .sort(
             (a, b) =>
-              matrix.p[b.row] - matrix.p[a.row] ||
-              b.strategyValue - a.strategyValue ||
+              matrix.moveValues[b.row] - matrix.moveValues[a.row] ||
               b.value - a.value,
           )
+          .filter((line) => line.action.kind !== "pass")
           .slice(0, 3)
       : [];
-  const currentGrade = matrix?.grades[matrix.played[0]] || grade(null);
   const netLuck = timeline.reduce((sum, p) => sum + (p.luck ?? 0), 0);
-  const own = position?.teams[side].find((p) => p.active);
-  const opp = position?.teams[opponent].find((p) => p.active);
+  const reviewed = timeline.filter((point) => !point.provisional);
+  const outcomeMoments = reviewed.filter((point) => point.luck !== null);
+  const rankedMoments = [
+    { title: "Best outcomes", sign: 1 },
+    { title: "Worst outcomes", sign: -1 },
+  ].map((group) => ({
+    ...group,
+    moments: outcomeMoments
+      .filter((point) => group.sign * point.luck! > 0)
+      .sort((a, b) => group.sign * (b.luck! - a.luck!)),
+  }));
   const ownScore = timeline.filter((p) => p.regret !== null);
   const foeScore = timeline.filter((p) => p.opponentRegret !== null);
   const accuracy = (list: AnalysisPoint[], foe = false) =>
@@ -604,33 +812,15 @@ function App() {
               </div>
               <div className="player-heading">
                 <strong>{names[side]}</strong>
-                <span className="accuracy">
-                  {a1 === null ? "—" : a1.toFixed(1) + "%"}{" "}
-                  <small>review score</small>
-                </span>
                 <span className="versus">vs.</span>
                 <strong>{names[opponent]}</strong>
-                <span className="accuracy">
-                  {a2 === null ? "—" : a2.toFixed(1) + "%"}{" "}
-                  <small>review score</small>
-                </span>
               </div>
               <div className="match-options">
                 <label>
                   Viewing{" "}
                   <select
                     value={side}
-                    onChange={(e) => {
-                      const next = Number(e.target.value) as Side;
-                      setSide(next);
-                      setTimeline([]);
-                      setBranches([]);
-                      void review(
-                        Math.max(0, position?.index ?? 0),
-                        next,
-                        oracle,
-                      );
-                    }}
+                    onChange={(e) => switchSide(Number(e.target.value) as Side)}
                   >
                     <option value={0}>{names[0]}</option>
                     <option value={1}>{names[1]}</option>
@@ -672,22 +862,83 @@ function App() {
                       : "Masked critic · hindsight-assisted"}
                   </span>
                 </div>
+                <div className="opponent-choices">
+                  <div className="section-caption">
+                    <b>Opponent's reply</b>
+                    <button
+                      className="plain"
+                      disabled={row === null && col === null}
+                      onClick={() => {
+                        setRow(null);
+                        setCol(null);
+                      }}
+                    >
+                      Clear choices
+                    </button>
+                  </div>
+                  <ActionChoices
+                    key={`${loaded.replay.id}:${position?.index}:${opponent}`}
+                    actions={
+                      matrix?.columns || position?.actions[opponent] || []
+                    }
+                    selected={col}
+                    onSelect={(index) => chooseAction(index, true)}
+                    className="reply-grid"
+                    suggested={matrix ? bestCol : undefined}
+                    ended={
+                      matrix?.rows[0]?.kind === "pass" &&
+                      matrix?.columns[0]?.kind === "pass"
+                    }
+                  >
+                    {(a, i) => (
+                      <ActionButton
+                        key={a.id}
+                        action={a}
+                        selected={col === i}
+                        best={
+                          !!matrix &&
+                          (row !== null
+                            ? Math.abs(
+                                matrix.values[row][i] -
+                                  matrix.values[row][bestCol],
+                              ) < 1e-7
+                            : Math.abs(
+                                matrix.opponentMoveValues[i] -
+                                  matrix.opponentMoveValues[bestCol],
+                              ) < 1e-7)
+                        }
+                        played={matrix?.played[1] === i}
+                        value={
+                          matrix
+                            ? row !== null
+                              ? 1 - matrix.values[row][i]
+                              : matrix.opponentMoveValues[i]
+                            : undefined
+                        }
+                        assessment={matrix?.opponentGrades[i]}
+                        onClick={() => chooseAction(col === i ? null : i, true)}
+                      />
+                    )}
+                  </ActionChoices>
+                  {!matrix && (
+                    <p className="muted">
+                      {busy
+                        ? "Calculating legal replies…"
+                        : "Select a position to analyze."}
+                    </p>
+                  )}
+                </div>
                 <div className="battle-body">
                   <div
                     className="eval-bar"
-                    aria-label={`Full-information win probability ${positionValue === null ? "unavailable" : percent(positionValue)}`}
-                    title="Current position, evaluated with both teams revealed in either review mode"
+                    aria-label={`${oracle ? "Oracle" : "Masked"} win probability for ${names[side]} ${positionValue === null ? "unavailable" : percent(positionValue)}`}
+                    title={`White: ${names[side]}; black: ${names[opponent]}. ${oracle ? "All information revealed" : "Player-visible information"}.`}
                   >
-                    <span>+100</span>
+                    <span>0%</span>
                     <div className="eval-track">
                       <div
                         style={{
-                          bottom: `${Math.min(50, (positionValue ?? 0.5) * 100)}%`,
-                          height: `${Math.abs((positionValue ?? 0.5) * 100 - 50)}%`,
-                          background:
-                            (positionValue ?? 0.5) >= 0.5
-                              ? "var(--eval-blue)"
-                              : "var(--eval-red)",
+                          height: `${(positionValue ?? 0.5) * 100}%`,
                         }}
                       />
                       <i />
@@ -696,109 +947,36 @@ function App() {
                           bottom: `${Math.min(93, Math.max(4, (positionValue ?? 0.5) * 100))}%`,
                         }}
                       >
-                        {positionValue === null
-                          ? "—"
-                          : advantage(positionValue)}
+                        {positionValue === null ? "—" : percent(positionValue)}
                       </b>
                     </div>
-                    <span>−100</span>
+                    <span>100%</span>
                   </div>
-                  <div className="arena">
-                    <div className="trainer opponent">
-                      <b>{names[opponent]}</b>
-                      <div className="team-icons">
-                        {Array.from({ length: 6 }, (_, i) => {
-                          const mon = position?.teams[opponent][i];
-                          return mon ? (
-                            <span
-                              key={i}
-                              title={`${mon.species} · ${Math.round((mon.hp / mon.maxhp) * 100)}%`}
-                            >
-                              <Sprite mon={mon} small />
-                            </span>
-                          ) : (
-                            <span
-                              className="unknown"
-                              key={i}
-                              title="Unrevealed Pokémon"
-                            >
-                              ?
-                            </span>
-                          );
-                        })}
-                      </div>
-                      <small>
-                        {position?.conditions[opponent].join(" · ") ||
-                          "No hazards"}
-                      </small>
-                    </div>
-                    {opp && (
-                      <>
-                        <div className="hp-card opp-hp">
-                          <b>{opp.species}</b>
-                          <small> L{opp.level}</small>
-                          <div className="hp">
-                            <i
-                              style={{
-                                width: `${(opp.hp / opp.maxhp) * 100}%`,
-                              }}
-                            />
-                          </div>
-                          <span>
-                            {Math.ceil((opp.hp / opp.maxhp) * 100)}%{" "}
-                            {opp.status || ""}
-                            {opp.tera && ` · Tera ${opp.tera}`}
-                          </span>
-                        </div>
-                        <div className="opp-sprite">
-                          <Sprite mon={opp} />
-                        </div>
-                      </>
-                    )}
-                    <div className="field-condition">{position?.weather}</div>
-                    {own && (
-                      <>
-                        <div className="own-sprite">
-                          <Sprite mon={own} back />
-                        </div>
-                        <div className="hp-card own-hp">
-                          <b>{own.species}</b>
-                          <small> L{own.level}</small>
-                          <div
-                            className={`hp ${own.hp / own.maxhp < 0.5 ? "low" : ""}`}
-                          >
-                            <i
-                              style={{
-                                width: `${(own.hp / own.maxhp) * 100}%`,
-                              }}
-                            />
-                          </div>
-                          <span>
-                            {own.hp} / {own.maxhp} {own.status || ""}
-                            {own.tera && ` · Tera ${own.tera}`}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                    <div className="trainer own">
-                      <b>{names[side]}</b>
-                      <div className="team-icons">
-                        {position?.teams[side].map((mon, i) => (
-                          <span
-                            key={i}
-                            title={`${mon.species} · ${Math.round((mon.hp / mon.maxhp) * 100)}%`}
-                          >
-                            <Sprite mon={mon} small />
-                          </span>
-                        ))}
-                      </div>
-                      <small>
-                        {position?.conditions[side].join(" · ") || "No hazards"}
-                      </small>
-                    </div>
-                  </div>
+                  {position && (
+                    <Battlefield
+                      position={position}
+                      side={side}
+                      replay={loaded.replay.id}
+                      onLog={setBattleLog}
+                      playing={playing}
+                      onSettled={setSettled}
+                    />
+                  )}
                 </div>
                 <div className="replay-controls">
+                  <button
+                    aria-label={playing ? "Pause replay" : "Play replay"}
+                    onClick={() => {
+                      if (
+                        !playing &&
+                        position?.index === loaded.positions.length
+                      )
+                        void review(0, side, oracle, true);
+                      setPlaying(!playing);
+                    }}
+                  >
+                    {playing ? <Pause size={17} /> : <Play size={17} />}
+                  </button>
                   <button aria-label="First turn" onClick={() => review(0)}>
                     <ChevronsLeft size={17} />
                   </button>
@@ -825,14 +1003,17 @@ function App() {
                         {p.phase === "switch" ? " · switch" : ""}
                       </option>
                     ))}
+                    <option value={loaded.positions.length}>
+                      Battle ended
+                    </option>
                   </select>
                   <button
                     aria-label="Next turn"
-                    disabled={position?.index === loaded.positions.length - 1}
+                    disabled={position?.index === loaded.positions.length}
                     onClick={() =>
                       review(
                         Math.min(
-                          loaded.positions.length - 1,
+                          loaded.positions.length,
                           (position?.index || 0) + 1,
                         ),
                       )
@@ -842,110 +1023,107 @@ function App() {
                   </button>
                   <button
                     aria-label="Last turn"
-                    onClick={() => review(loaded.positions.length - 1)}
+                    onClick={() => review(loaded.positions.length)}
                   >
                     <ChevronsRight size={17} />
                   </button>
+                  <button
+                    onClick={() => switchSide(opponent)}
+                    title="Switch sides"
+                  >
+                    <ArrowLeftRight size={15} /> Switch sides
+                  </button>
                   <span>
-                    Decision {Math.max(0, position?.index || 0) + 1} /{" "}
-                    {loaded.positions.length}
+                    {position && position.index < 0
+                      ? `Exploring · ${branches.length} decisions`
+                      : position?.phase === "ended"
+                        ? "Battle ended"
+                        : `Decision ${(position?.index ?? 0) + 1} / ${loaded.positions.length}`}
                   </span>
                 </div>
                 <div className="choices">
                   <div className="section-caption">
-                    <b>
-                      {col !== null ? "Your best response" : "Your choices"}
-                    </b>
-                    <span>
-                      {col !== null && matrix
-                        ? `against ${matrix.columns[col].label}`
-                        : "Click a move to see their strongest reply"}
-                    </span>
+                    <b>Your choices</b>
                   </div>
-                  <div className="action-grid">
-                    {(matrix?.rows || position?.actions[side] || []).map(
-                      (a, i) => (
-                        <ActionButton
-                          key={a.id}
-                          action={a}
-                          selected={row === i}
-                          best={!!matrix && i === bestRow}
-                          played={matrix?.played[0] === i}
-                          regret={
-                            matrix && !matrix.provisional
-                              ? Math.max(
-                                  0,
-                                  matrix.value -
-                                    matrix.values[i].reduce(
-                                      (sum, value, j) =>
-                                        sum + value * matrix.q[j],
-                                      0,
-                                    ),
-                                )
-                              : undefined
-                          }
-                          assessment={matrix?.grades[i]}
-                          value={
-                            matrix
-                              ? col !== null
-                                ? matrix.values[i][col]
-                                : matrix.values[i].reduce(
-                                    (s, v, j) => s + v * matrix.q[j],
-                                    0,
-                                  )
-                              : undefined
-                          }
-                          onClick={() => setRow(row === i ? null : i)}
-                        />
-                      ),
+                  <ActionChoices
+                    key={`${loaded.replay.id}:${position?.index}:${side}`}
+                    actions={matrix?.rows || position?.actions[side] || []}
+                    selected={row}
+                    onSelect={(index) => chooseAction(index)}
+                    className="action-grid"
+                    suggested={matrix ? bestRow : undefined}
+                    ended={
+                      matrix?.rows[0]?.kind === "pass" &&
+                      matrix?.columns[0]?.kind === "pass"
+                    }
+                  >
+                    {(a, i) => (
+                      <ActionButton
+                        key={a.id}
+                        action={a}
+                        selected={row === i}
+                        best={
+                          !!matrix &&
+                          (col !== null
+                            ? Math.abs(
+                                matrix.values[i][col] -
+                                  matrix.values[bestRow][col],
+                              ) < 1e-7
+                            : Math.abs(
+                                matrix.moveValues[i] -
+                                  matrix.moveValues[bestRow],
+                              ) < 1e-7)
+                        }
+                        played={matrix?.played[0] === i}
+                        regret={
+                          matrix && !matrix.provisional && col === null
+                            ? Math.max(
+                                0,
+                                Math.max(...matrix.moveValues) -
+                                  matrix.moveValues[i],
+                              )
+                            : undefined
+                        }
+                        assessment={
+                          col === null ? matrix?.grades[i] : undefined
+                        }
+                        value={
+                          matrix
+                            ? col !== null
+                              ? matrix.values[i][col]
+                              : matrix.moveValues[i]
+                            : undefined
+                        }
+                        onClick={() => chooseAction(row === i ? null : i)}
+                      />
                     )}
-                  </div>
+                  </ActionChoices>
                 </div>
               </section>
               <aside className="review-panel panel">
                 <div className="panel-title">
-                  <b>Engine review</b>
-                  <span className="depth">1-turn search</span>
+                  <b>Battle log</b>
                 </div>
-                <div className="opponent-choices">
-                  <div className="section-caption">
-                    <b>Opponent's reply</b>
+                <div
+                  ref={logElement}
+                  role="log"
+                  aria-label="Battle log"
+                  className="battle-log"
+                  dangerouslySetInnerHTML={{ __html: battleLog }}
+                />
+                <div className="panel-title">
+                  <b>Engine review</b>
+                  {position && position.index < 0 && (
                     <button
                       className="plain"
-                      disabled={row === null && col === null}
+                      disabled={!!busy}
                       onClick={() => {
-                        setRow(null);
-                        setCol(null);
+                        setBranches([]);
+                        void review(replayIndex);
                       }}
                     >
-                      Clear choices
+                      Return to replay
                     </button>
-                  </div>
-                  <div className="reply-grid">
-                    {(matrix?.columns || position?.actions[opponent] || []).map(
-                      (a, i) => (
-                        <ActionButton
-                          key={a.id}
-                          action={a}
-                          selected={col === i}
-                          best={!!matrix && i === bestCol}
-                          played={matrix?.played[1] === i}
-                          value={
-                            row !== null && matrix
-                              ? 1 - matrix.values[row][i]
-                              : undefined
-                          }
-                          onClick={() => setCol(col === i ? null : i)}
-                        />
-                      ),
-                    )}
-                  </div>
-                  {!matrix && (
-                    <p className="muted">
-                      {busy
-                        ? "Calculating legal replies…"
-                        : "Select a position to analyze."}
-                    </p>
                   )}
                 </div>
                 <div className="review-tabs">
@@ -961,37 +1139,9 @@ function App() {
                   >
                     Continuation {branches.length > 0 && `(${branches.length})`}
                   </button>
-                  <button
-                    className={tab === "log" ? "active" : ""}
-                    onClick={() => setTab("log")}
-                  >
-                    Battle log
-                  </button>
                 </div>
                 {tab === "review" && (
                   <div className="review-content">
-                    <div
-                      className="engine-score"
-                      title="Full-information position score: 200 × win probability − 100"
-                    >
-                      <strong
-                        className={
-                          (positionValue ?? 0.5) >= 0.5
-                            ? "score-positive"
-                            : "score-negative"
-                        }
-                      >
-                        {positionValue === null
-                          ? "0.00"
-                          : advantage(positionValue)}
-                      </strong>
-                      <span>
-                        {positionValue === null
-                          ? "Evaluating position…"
-                          : `${percent(positionValue)} win · full information`}
-                      </span>
-                      <small>Depth 1 · fixed seed</small>
-                    </div>
                     {matrix ? (
                       <>
                         {matrix.provisional && (
@@ -1000,67 +1150,37 @@ function App() {
                             complete
                           </p>
                         )}
-                        <div className="move-grade">
-                          <span
-                            className={`grade-icon ${currentGrade.className}`}
-                          >
-                            {currentGrade.symbol}
-                          </span>
-                          <div>
-                            <strong>
-                              {matrix.played[0] >= 0
-                                ? matrix.rows[matrix.played[0]].label
-                                : "No recorded decision"}
-                            </strong>
-                            <span className={currentGrade.className}>
-                              {currentGrade.label}
-                              {matrix.approximate &&
-                                !matrix.provisional &&
-                                " (estimated)"}
-                              {matrix.regret !== null &&
-                                ` · ${points(-matrix.regret)} lost`}
-                            </span>
-                          </div>
-                        </div>
-                        {matrix.played[0] >= 0 && (
-                          <p className="note">
-                            {matrix.grades[matrix.played[0]]?.reason}
-                          </p>
-                        )}
-                        <div className="recommendation">
-                          <span className="grade-icon best">★</span>
-                          <div>
-                            <strong>
-                              {matrix.rows[bestRow].label}
-                              {matrix.rows[bestRow].tera ? " + Tera" : ""}
-                            </strong>
-                            <p>
-                              {matrix.provisional
-                                ? "Comparing actions; recommendation may change."
-                                : col !== null
-                                  ? "Best estimated response to the selected opponent action."
-                                  : "Highest-frequency action in the lines below. Compare its strongest opposing reply before exploring."}
-                            </p>
-                          </div>
-                          <b>
-                            {percent(
-                              col !== null
-                                ? matrix.values[bestRow][col]
-                                : matrix.values[bestRow].reduce(
-                                    (s, v, j) => s + v * matrix.q[j],
-                                    0,
-                                  ),
-                            )}
-                          </b>
-                        </div>
+                        {[0, 1].map((player) => {
+                          const played = matrix.played[player];
+                          const action = (
+                            player ? matrix.columns : matrix.rows
+                          )[played];
+                          const assessment = (
+                            player ? matrix.opponentGrades : matrix.grades
+                          )[played];
+                          return (
+                            action &&
+                            assessment && (
+                              <div className="move-grade" key={player}>
+                                <GradeIcon assessment={assessment} />
+                                <div>
+                                  <small>
+                                    {names[player ? opponent : side]}
+                                  </small>
+                                  <br />
+                                  <strong>
+                                    {action.label}
+                                    {action.tera ? " + Tera" : ""}
+                                  </strong>{" "}
+                                  · {assessment.label}
+                                </div>
+                              </div>
+                            )
+                          );
+                        })}
                         {topLines.length > 0 && (
                           <div className="top-lines">
-                            <b>Analysis lines · depth 1</b>
-                            <small>
-                              Frequency · your choice / opponent’s strongest
-                              reply. Scores value that fixed-seed pair, not the
-                              whole mix.
-                            </small>
+                            <b>Best lines</b>
                             {topLines.map((line) => (
                               <button
                                 key={line.row}
@@ -1072,11 +1192,8 @@ function App() {
                                 }}
                               >
                                 <strong title="Score against the strongest reply">
-                                  {advantage(line.value)}
+                                  {percent(line.value)}
                                 </strong>
-                                <small title="Recommended choice frequency">
-                                  {percent(matrix.p[line.row])}
-                                </small>
                                 <span
                                   title={`${names[side]} / ${names[opponent]}`}
                                 >
@@ -1104,7 +1221,7 @@ function App() {
                             <dt>
                               {matrix.provisional
                                 ? "Estimated value"
-                                : "Equilibrium value"}
+                                : "Evaluation"}
                             </dt>
                             <dd>{percent(matrix.value)}</dd>
                           </div>
@@ -1133,12 +1250,12 @@ function App() {
                             </dd>
                           </div>
                         </dl>
-                        <p className="note">
-                          <Info size={13} />
-                          {oracle
-                            ? "Model estimates · all information revealed"
-                            : "Masked inputs · hindsight may influence analysis"}
-                        </p>
+                        {!oracle && (
+                          <p className="note">
+                            Grades use masked critic inputs, but simulations use
+                            actual teams.
+                          </p>
+                        )}
                         <button
                           className="continue-button"
                           disabled={
@@ -1188,12 +1305,6 @@ function App() {
                           </b>
                           <span>{percent(branch.value)}</span>
                         </div>
-                        {branch.approximate && (
-                          <p className="note">
-                            One fixed-seed continuation, not a prediction of the
-                            actual roll.
-                          </p>
-                        )}
                         {branch.outcomes.map((o) => (
                           <button
                             className="outcome"
@@ -1202,9 +1313,7 @@ function App() {
                             onClick={() => review(-Number(o.key))}
                           >
                             <span>{o.label}</span>
-                            <small>
-                              Fixed-seed outcome · {percent(o.value)} win
-                            </small>
+                            <small>{percent(o.value)}</small>
                             <ChevronRight size={13} />
                           </button>
                         ))}
@@ -1228,17 +1337,6 @@ function App() {
                     >
                       <RotateCcw size={13} /> Return to replay
                     </button>
-                  </div>
-                )}
-                {tab === "log" && (
-                  <div className="battle-log">
-                    {position?.log
-                      .filter((l) => l && !l.startsWith("|t:"))
-                      .map((l, i) => (
-                        <div key={i}>
-                          {l.split("|").filter(Boolean).join(" · ")}
-                        </div>
-                      ))}
                   </div>
                 )}
               </aside>
@@ -1427,7 +1525,6 @@ function App() {
                   <b>
                     <Clover size={15} /> Luck-o-meter
                   </b>
-                  <span>Outcome swing · fixed-seed baseline</span>
                 </div>
                 <div className="luck-total">
                   <strong className={netLuck < 0 ? "negative" : "positive"}>
@@ -1436,13 +1533,9 @@ function App() {
                       : "—"}
                   </strong>
                   <span>
-                    {!timeline.some((p) => p.luck !== null)
-                      ? "Awaiting reviewed outcomes"
-                      : netLuck < -0.01
-                        ? "Replay outcome below the fixed-seed baseline"
-                        : netLuck > 0.01
-                          ? "Replay outcome above the fixed-seed baseline"
-                          : "About even so far"}
+                    {reviewed.length === loaded.positions.length
+                      ? `Whole game · ${names[side]}`
+                      : `Partial total · ${reviewed.length} / ${loaded.positions.length} decisions reviewed`}
                   </span>
                 </div>
                 <div className="luck-track">
@@ -1453,26 +1546,35 @@ function App() {
                   </div>
                   <span>Better</span>
                 </div>
-                <p>
-                  Outcome swing against one fixed roll—not statistical luck.
-                </p>
-                {timeline
-                  .filter((p) => p.luck !== null && Math.abs(p.luck) > 0.01)
-                  .sort((a, b) => Math.abs(b.luck!) - Math.abs(a.luck!))
-                  .slice(0, 3)
-                  .map((p) => (
-                    <button
-                      className="luck-event"
-                      key={p.index}
-                      onClick={() => review(p.index)}
-                    >
-                      <span>Turn {p.turn}</span>
-                      <b className={p.luck! < 0 ? "negative" : "positive"}>
-                        {points(p.luck!)}
-                      </b>
-                      <ChevronRight size={13} />
-                    </button>
+                <div className="luck-split">
+                  {rankedMoments.map((group) => (
+                    <section key={group.sign}>
+                      <h3>{group.title}</h3>
+                      {group.moments.length === 0 && (
+                        <p className="note">No recorded swings yet.</p>
+                      )}
+                      {group.moments.map((point, rank) => (
+                        <button
+                          className="luck-event"
+                          key={point.index}
+                          onClick={() => review(point.index)}
+                        >
+                          <span>
+                            {rank + 1}. Turn {point.turn} · decision{" "}
+                            {point.index + 1}
+                            <br />
+                            {eventSummary(point.events || [])}
+                          </span>
+                          <b
+                            className={group.sign < 0 ? "negative" : "positive"}
+                          >
+                            {points(point.luck!)}
+                          </b>
+                        </button>
+                      ))}
+                    </section>
                   ))}
+                </div>
               </section>
               <section className="panel scorecard">
                 <div className="panel-title">
@@ -1491,6 +1593,19 @@ function App() {
                     </tr>
                   </thead>
                   <tbody>
+                    <tr className="accuracy-row">
+                      <td>
+                        <strong>
+                          {a1 === null ? "—" : `${a1.toFixed(1)}%`}
+                        </strong>
+                      </td>
+                      <th>Accuracy</th>
+                      <td>
+                        <strong>
+                          {a2 === null ? "—" : `${a2.toFixed(1)}%`}
+                        </strong>
+                      </td>
+                    </tr>
                     {[
                       {
                         label: "Brilliant",
@@ -1511,9 +1626,7 @@ function App() {
                             }
                           </td>
                           <th>
-                            <span className={`grade-icon ${g.className}`}>
-                              {g.symbol}
-                            </span>
+                            <GradeIcon assessment={g} />
                             {label}
                           </th>
                           <td>
@@ -1606,7 +1719,7 @@ function App() {
                                   }}
                                   title={
                                     matrix.counts[i][j]
-                                      ? "1 fixed-seed successor evaluated"
+                                      ? "Evaluated"
                                       : "Pending: this action pair has not been evaluated"
                                   }
                                 >
@@ -1635,12 +1748,6 @@ function App() {
                       </tfoot>
                     </table>
                   </div>
-                  <small>
-                    Expected payoff to the next decision boundary · equilibrium
-                    gap {(matrix.exploitability * 100).toFixed(3)} pp. Uses
-                    actual teams; critic error and hindsight bias remain. Each
-                    player's grades use their own critic perspective.
-                  </small>
                 </>
               )}
             </section>
@@ -1734,9 +1841,12 @@ function App() {
               <b>Information modes.</b> Both modes simulate actual teams. Masked
               mode restricts critic inputs, but simulated outcomes can leak
               hindsight. Oracle gives the critic both private observations;
-              full-information calibration has not been validated. The
-              evaluation bar always evaluates the current position with both
-              teams revealed, independently of the selected matrix actions.
+              full-information calibration has not been validated. Oracle
+              evaluates each move against its strongest legal reply and rates
+              the loss relative to the best such move. Its position value is
+              that best worst-case score. Masked mode retains Nash evaluation
+              and grades against the equilibrium defense. Selecting a reply
+              displays that specific matchup instead.
             </p>
             <p>
               <b>Luck-o-meter shows outcome swing.</b> It compares the replay’s

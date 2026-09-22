@@ -131,6 +131,8 @@ function view(
         active: m.isActive,
         fainted: m.fainted,
         tera: m.terastallized || "",
+        teraType: m.teraType,
+        stats: { ...m.storedStats },
         types: m.types,
         moves: m.moveSlots.map((v: Native) => battle.dex.moves.get(v.id).name),
         item: m.item,
@@ -166,9 +168,9 @@ function view(
       Object.values(s.sideConditions).map((c) => c.name),
     ),
     weather: known.field.weather || known.field.terrain || "",
-    log: engine
-      .extractChannelMessages(frame.state.log.join("\n"), [0])[0]
-      .slice(-24),
+    log: engine.extractChannelMessages(frame.state.log.join("\n"), [
+      perspective + 1,
+    ])[perspective + 1],
   };
 }
 function comparison(log: string[]) {
@@ -234,7 +236,11 @@ async function load(input: Replay): Promise<Loaded> {
   for (const line of input.inputlog.split("\n")) {
     if (!line.trim() || line.startsWith(">version") || line.startsWith(">chat"))
       continue;
-    if (!/^>(start|player|p1|p2|forcewin|forcelose|forcetie|tiebreak)(?: |$)/.test(line))
+    if (
+      !/^>(start|player|p1|p2|forcewin|forcelose|forcetie|tiebreak)(?: |$)/.test(
+        line,
+      )
+    )
       continue;
     const choice = /^>(p[12]) (.+)$/.exec(line);
     if (choice) {
@@ -506,6 +512,8 @@ async function analyze(
       cells.reduce((sum, cell) => sum + cell.count, 0) /
       (cells.length * REVIEW.samples);
     const solved = solveMatrix(values);
+    const moveValues = oracle ? solved.worstValues : solved.rowValues;
+    const positionValue = oracle ? solved.safestValue : solved.value;
     if (solved.exploitability > 1e-5)
       throw new Error(
         "Not graded: payoff equilibrium failed numerical verification.",
@@ -513,9 +521,7 @@ async function analyze(
     const playedRow = rows.findIndex((a) => a.id === frame.played[perspective]);
     const playedCol = columns.findIndex((a) => a.id === frame.played[foe]);
     const regret =
-      playedRow < 0
-        ? null
-        : Math.max(0, solved.value - solved.rowValues[playedRow]);
+      playedRow < 0 ? null : Math.max(0, positionValue - moveValues[playedRow]);
     const opponentValues = columns.map((column) =>
       rows.map((row) => {
         const pair = ["", ""];
@@ -527,45 +533,58 @@ async function analyze(
       }),
     );
     const opponentSolved = solveMatrix(opponentValues);
+    const opponentMoveValues = oracle
+      ? opponentSolved.worstValues
+      : opponentSolved.rowValues;
+    const opponentValue = oracle
+      ? opponentSolved.safestValue
+      : opponentSolved.value;
     if (opponentSolved.exploitability > 1e-5)
       throw new Error("Opponent equilibrium failed numerical verification.");
     const opponentRegret =
       playedCol < 0
         ? null
-        : Math.max(
-            0,
-            opponentSolved.value - opponentSolved.rowValues[playedCol],
-          );
-    const sacrifice = rows.map((row) =>
+        : Math.max(0, opponentValue - opponentMoveValues[playedCol]);
+    const sacrifice = rows.map((row, i) =>
       columns.reduce((sum, column, j) => {
+        const weight = oracle
+          ? Number(j === values[i].indexOf(solved.worstValues[i]))
+          : solved.q[j];
+        if (!weight) return sum;
         const pair = ["", ""];
         pair[perspective] = row.id;
         pair[foe] = column.id;
         return (
           sum +
-          solved.q[j] *
+          weight *
             matchups.get(`${index}:${oracle}:${pair.join("|")}`)!.sacrifice[
               perspective
             ]
         );
       }, 0),
     );
-    const opponentSacrifice = columns.map((column) =>
+    const opponentSacrifice = columns.map((column, j) =>
       rows.reduce((sum, row, i) => {
+        const weight = oracle
+          ? Number(
+              i === opponentValues[j].indexOf(opponentSolved.worstValues[j]),
+            )
+          : opponentSolved.q[i];
+        if (!weight) return sum;
         const pair = ["", ""];
         pair[perspective] = row.id;
         pair[foe] = column.id;
         return (
           sum +
-          opponentSolved.q[i] *
+          weight *
             matchups.get(`${index}:${oracle}:${pair.join("|")}`)!.sacrifice[foe]
         );
       }, 0),
     );
-    const grades = classifyMoves(solved.rowValues, solved.value, sacrifice);
+    const grades = classifyMoves(moveValues, positionValue, sacrifice);
     const opponentGrades = classifyMoves(
-      opponentSolved.rowValues,
-      opponentSolved.value,
+      opponentMoveValues,
+      opponentValue,
       opponentSacrifice,
     );
     let expected: number | null = null,
@@ -583,6 +602,8 @@ async function analyze(
       rows,
       columns,
       values,
+      moveValues,
+      opponentMoveValues,
       counts,
       grades: provisional
         ? rows.map(() => ({
@@ -603,7 +624,7 @@ async function analyze(
         : opponentGrades,
       p: solved.p,
       q: solved.q,
-      value: solved.value,
+      value: positionValue,
       exploitability: solved.exploitability,
       mode: oracle ? "oracle" : "masked",
       perspective,
@@ -613,7 +634,7 @@ async function analyze(
       expected,
       realized,
       played: [playedRow, playedCol],
-      best: solved.best,
+      best: oracle ? solved.best : solved.p.indexOf(Math.max(...solved.p)),
       events: frame.after
         ? channel(frame.after, perspective)
             .slice(channel(frame.state, perspective).length)
@@ -690,7 +711,7 @@ onmessage = async (event) => {
     } else if (type === "evaluation") {
       const frame =
         input.index < 0 ? branchFrames[-input.index - 1] : frames[input.index];
-      [result] = await evaluate([frame.state], input.perspective, true);
+      [result] = await evaluate([frame.state], input.perspective, input.oracle);
     } else if (type === "overview") {
       const states = frames.map((frame) => frame.state);
       const values = await evaluate(states, input.perspective, input.oracle);
@@ -727,6 +748,7 @@ onmessage = async (event) => {
           opponentRegret: matrix?.opponentRegret ?? null,
           grade: matrix?.grades[matrix.played[0]]?.label,
           opponentGrade: matrix?.opponentGrades[matrix.played[1]]?.label,
+          events: matrix?.events,
         });
       }
       result = points;
@@ -789,6 +811,7 @@ onmessage = async (event) => {
               opponentRegret: result.opponentRegret,
               grade: result.grades[result.played[0]]?.label,
               opponentGrade: result.opponentGrades[result.played[1]]?.label,
+              events: result.events,
             },
           });
           postMessage({

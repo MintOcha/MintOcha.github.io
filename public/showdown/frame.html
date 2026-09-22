@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="stylesheet" href="style/battle.css" />
+    <link rel="stylesheet" href="style/utilichart.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+      .battle {
+        position: absolute;
+        left: 0;
+        top: 0;
+        transform-origin: top left;
+      }
+      .battle-log {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="battle"></div>
+    <div class="battle-log"></div>
+    <script src="config.js"></script>
+    <script src="js/lib/jquery-1.11.0.min.js"></script>
+    <script src="js/lib/html-sanitizer-minified.js"></script>
+    <script src="js/battle-sound.js"></script>
+    <script src="js/battledata.js"></script>
+    <script src="data/pokedex-mini.js"></script>
+    <script src="data/pokedex-mini-bw.js"></script>
+    <script src="data/graphics.js"></script>
+    <script src="data/pokedex.js"></script>
+    <script src="data/moves.js"></script>
+    <script src="data/abilities.js"></script>
+    <script src="data/items.js"></script>
+    <script src="data/teambuilder-tables.js"></script>
+    <script src="js/battle-tooltips.js"></script>
+    <script src="js/battle.js"></script>
+    <script src="frame.js"></script>
+  </body>
+</html>
