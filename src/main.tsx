@@ -558,10 +558,15 @@ function App() {
       setBusy("");
     }
   }
+  useEffect(() => {
+    if (!matrix || !position || settled !== position.index || (row === null && col === null)) return;
+    const r = row ?? (matrix.rows[0]?.kind === "pass" ? 0 : null);
+    const c = col ?? (matrix.columns[0]?.kind === "pass" ? 0 : null);
+    if (r !== null && c !== null) void continueLine({ row: r, col: c });
+  }, [row, col, settled, position, matrix]);
   function chooseAction(index: number | null, opponentChoice = false) {
     if (
       !matrix ||
-      settled !== position?.index ||
       (matrix.rows[0]?.kind === "pass" && matrix.columns[0]?.kind === "pass")
     )
       return;
@@ -569,9 +574,6 @@ function App() {
     const nextCol = opponentChoice ? index : col;
     setRow(nextRow);
     setCol(nextCol);
-    const r = nextRow ?? (matrix.rows[0]?.kind === "pass" ? 0 : null);
-    const c = nextCol ?? (matrix.columns[0]?.kind === "pass" ? 0 : null);
-    if (r !== null && c !== null) void continueLine({ row: r, col: c });
   }
   async function continueLine(
     pair?: { row: number; col: number },
@@ -589,6 +591,8 @@ function App() {
     const c =
       pair?.col ??
       matrix.opponentMoveValues.indexOf(Math.max(...matrix.opponentMoveValues));
+    setRow(null);
+    setCol(null);
     reviewingBattle.current = false;
     const pending = interruptReview();
     setBusy("Exploring continuation…");
