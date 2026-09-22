@@ -217,13 +217,28 @@ function App() {
   const [link, setLink] = useState("");
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [position, setPosition] = useState<PositionView | null>(null);
-  const [matrix, setMatrix] = useState<Matrix | null>(null);
+  const [analysisMatrix, setMatrix] = useState<Matrix | null>(null);
   const [side, setSide] = useState<Side>(0);
   const oracle = false;
   const [positionValue, setPositionValue] = useState<number | null>(null);
   const [battleLog, setBattleLog] = useState("");
   const [playing, setPlaying] = useState(false);
   const [settled, setSettled] = useState<number | null>(null);
+  const [displayed, setDisplayed] = useState<{
+    position: PositionView;
+    matrix: Matrix | null;
+    value: number | null;
+  } | null>(null);
+  const matrix =
+    settled === position?.index ? analysisMatrix : (displayed?.matrix ?? null);
+  const displayPosition =
+    settled === position?.index ? position : displayed?.position;
+  const displayValue =
+    settled === position?.index ? positionValue : (displayed?.value ?? null);
+  useEffect(() => {
+    if (position && settled === position.index)
+      setDisplayed({ position, matrix: analysisMatrix, value: positionValue });
+  }, [position, settled, analysisMatrix, positionValue]);
   const logElement = useRef<HTMLDivElement>(null);
   const workspaceElement = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState("");
@@ -281,20 +296,50 @@ function App() {
     return () => worker.removeEventListener("message", listener);
   }, []);
   useEffect(() => {
-    if (busy || playing || tab !== "review" || !position || !matrix || matrix.provisional || position.phase === "ended" || settled !== position.index) return;
+    if (
+      busy ||
+      playing ||
+      tab !== "review" ||
+      !position ||
+      !matrix ||
+      matrix.provisional ||
+      position.phase === "ended" ||
+      settled !== position.index
+    )
+      return;
     const key = `${loaded?.replay.id}:${position.index}:${side}:${oracle}`;
     if (linesPosition.current === key) return;
     linesPosition.current = key;
     const token = latest.current;
     setBusy("Finding best lines…");
-    call<Continuation[]>("continuations", { index: position.index, perspective: side, oracle })
+    call<Continuation[]>("continuations", {
+      index: position.index,
+      perspective: side,
+      oracle,
+    })
       .then((result) => {
         if (token !== latest.current) return;
         setLines(result);
-        setBranches((old) => [...old, ...result.flatMap((line) => line.steps).filter((entry, index, all) => !old.some((item) => item.view.index === entry.view.index) && all.findIndex((item) => item.view.index === entry.view.index) === index)]);
+        setBranches((old) => [
+          ...old,
+          ...result
+            .flatMap((line) => line.steps)
+            .filter(
+              (entry, index, all) =>
+                !old.some((item) => item.view.index === entry.view.index) &&
+                all.findIndex(
+                  (item) => item.view.index === entry.view.index,
+                ) === index,
+            ),
+        ]);
       })
-      .catch((error) => { if (token === latest.current && error.message !== "Analysis cancelled") setError(error.message); })
-      .finally(() => { if (token === latest.current) setBusy(""); });
+      .catch((error) => {
+        if (token === latest.current && error.message !== "Analysis cancelled")
+          setError(error.message);
+      })
+      .finally(() => {
+        if (token === latest.current) setBusy("");
+      });
   }, [busy, playing, tab, position, matrix, side, oracle, loaded, settled]);
   useLayoutEffect(() => {
     const element = workspaceElement.current;
@@ -557,15 +602,10 @@ function App() {
       setBusy("");
     }
   }
-  useEffect(() => {
-    if (!matrix || !position || settled !== position.index || (row === null && col === null)) return;
-    const r = row ?? (matrix.rows[0]?.kind === "pass" ? 0 : null);
-    const c = col ?? (matrix.columns[0]?.kind === "pass" ? 0 : null);
-    if (r !== null && c !== null) void continueLine({ row: r, col: c });
-  }, [row, col, settled, position, matrix]);
   function chooseAction(index: number | null, opponentChoice = false) {
     if (
       !matrix ||
+      settled !== position?.index ||
       (matrix.rows[0]?.kind === "pass" && matrix.columns[0]?.kind === "pass")
     )
       return;
@@ -573,6 +613,9 @@ function App() {
     const nextCol = opponentChoice ? index : col;
     setRow(nextRow);
     setCol(nextCol);
+    const r = nextRow ?? (matrix.rows[0]?.kind === "pass" ? 0 : null);
+    const c = nextCol ?? (matrix.columns[0]?.kind === "pass" ? 0 : null);
+    if (r !== null && c !== null) void continueLine({ row: r, col: c });
   }
   async function continueLine(
     pair?: { row: number; col: number },
@@ -898,7 +941,9 @@ function App() {
                   <ActionChoices
                     key={`${loaded.replay.id}:${position?.index}:${opponent}`}
                     actions={
-                      matrix?.columns || position?.actions[opponent] || []
+                      matrix?.columns ||
+                      displayPosition?.actions[opponent] ||
+                      []
                     }
                     selected={col}
                     onSelect={(index) => chooseAction(index, true)}
@@ -950,23 +995,23 @@ function App() {
                 <div className="battle-body">
                   <div
                     className="eval-bar"
-                    aria-label={`${oracle ? "Oracle" : "Masked"} win probability for ${names[side]} ${positionValue === null ? "unavailable" : percent(positionValue)}`}
+                    aria-label={`${oracle ? "Oracle" : "Masked"} win probability for ${names[side]} ${displayValue === null ? "unavailable" : percent(displayValue)}`}
                     title={`White: ${names[side]}; black: ${names[opponent]}. ${oracle ? "All information revealed" : "Player-visible information"}.`}
                   >
                     <span>100%</span>
                     <div className="eval-track">
                       <div
                         style={{
-                          height: `${(positionValue ?? 0.5) * 100}%`,
+                          height: `${(displayValue ?? 0.5) * 100}%`,
                         }}
                       />
                       <i />
                       <b
                         style={{
-                          bottom: `${Math.min(93, Math.max(4, (positionValue ?? 0.5) * 100))}%`,
+                          bottom: `${Math.min(93, Math.max(4, (displayValue ?? 0.5) * 100))}%`,
                         }}
                       >
-                        {positionValue === null ? "—" : percent(positionValue)}
+                        {displayValue === null ? "—" : percent(displayValue)}
                       </b>
                     </div>
                     <span>0%</span>
@@ -975,6 +1020,7 @@ function App() {
                     <Battlefield
                       position={position}
                       side={side}
+                      oracle={oracle}
                       replay={loaded.replay.id}
                       onLog={setBattleLog}
                       playing={playing}
@@ -1102,7 +1148,9 @@ function App() {
                   </div>
                   <ActionChoices
                     key={`${loaded.replay.id}:${position?.index}:${side}`}
-                    actions={matrix?.rows || position?.actions[side] || []}
+                    actions={
+                      matrix?.rows || displayPosition?.actions[side] || []
+                    }
                     selected={row}
                     onSelect={(index) => chooseAction(index)}
                     className="action-grid"
@@ -1237,15 +1285,55 @@ function App() {
                         </div>
                         <section className="best-lines" aria-label="Best lines">
                           <h3>Best lines</h3>
-                          <p className="note">Two decisions shown; each is evaluated one turn at a time. Replies shown are the strongest against each selected move.</p>
-                          {!lines.length && <p role="status">{position?.phase === "ended" ? "Battle ended" : "Finding best lines…"}</p>}
+                          <p className="note">
+                            Two decisions shown; each is evaluated one turn at a
+                            time. Replies shown are the strongest against each
+                            selected move.
+                          </p>
+                          {!lines.length && (
+                            <p role="status">
+                              {position?.phase === "ended"
+                                ? "Battle ended"
+                                : "Finding best lines…"}
+                            </p>
+                          )}
                           {lines.map((line, rank) => (
                             <article key={rank}>
-                              <header><b>Line {rank + 1}</b><strong>{percent(line.value)}</strong></header>
+                              <header>
+                                <b>Line {rank + 1}</b>
+                                <strong>{percent(line.value)}</strong>
+                              </header>
                               {line.steps.map((step) => (
-                                <button key={step.view.index} className="move-row" onClick={() => { reviewingBattle.current = false; void review(step.view.index); }}>
-                                  <small>Turn {step.parent >= 0 ? loaded.positions[step.parent]?.turn : branches.find((entry) => entry.view.index === step.parent)?.view.turn}</small>
-                                  {[side, opponent].map((player) => <span key={player}><small>{names[player]}</small><br />{step.actions[player].kind === "switch" ? "Switch → " : ""}{step.actions[player].label}{step.actions[player].tera ? " + Tera" : ""}</span>)}
+                                <button
+                                  key={step.view.index}
+                                  className="move-row"
+                                  onClick={() => {
+                                    reviewingBattle.current = false;
+                                    void review(step.view.index);
+                                  }}
+                                >
+                                  <small>
+                                    Turn{" "}
+                                    {step.parent >= 0
+                                      ? loaded.positions[step.parent]?.turn
+                                      : branches.find(
+                                          (entry) =>
+                                            entry.view.index === step.parent,
+                                        )?.view.turn}
+                                  </small>
+                                  {[side, opponent].map((player) => (
+                                    <span key={player}>
+                                      <small>{names[player]}</small>
+                                      <br />
+                                      {step.actions[player].kind === "switch"
+                                        ? "Switch → "
+                                        : ""}
+                                      {step.actions[player].label}
+                                      {step.actions[player].tera
+                                        ? " + Tera"
+                                        : ""}
+                                    </span>
+                                  ))}
                                 </button>
                               ))}
                             </article>
@@ -1370,7 +1458,9 @@ function App() {
                             className="luck-marker"
                           />
                         )}
-                        {((p.regret ?? 0) > 0.02 || p.grade === "Great" || p.grade === "Brilliant") && (
+                        {((p.regret ?? 0) > 0.02 ||
+                          p.grade === "Great" ||
+                          p.grade === "Brilliant") && (
                           <text
                             x={x}
                             y="16"
@@ -1379,7 +1469,9 @@ function App() {
                           >
                             {p.grade === "Brilliant"
                               ? "!!"
-                              : p.grade === "Great" ? "!" : grade(p.regret).symbol}
+                              : p.grade === "Great"
+                                ? "!"
+                                : grade(p.regret).symbol}
                           </text>
                         )}
                       </g>
@@ -1617,8 +1709,9 @@ function App() {
                     product conventions, not calibrated skill ratings. Brilliant
                     is a low-regret sacrifice: ≥50% expected chance of losing a
                     Pokémon, ≥5 pp better than every low-sacrifice alternative,
-                    and 50–95% expected win value.
-                    Great is the only Good-or-better choice when alternatives exist; Brilliant takes precedence.
+                    and 50–95% expected win value. Great is the only
+                    Good-or-better choice when alternatives exist; Brilliant
+                    takes precedence.
                   </small>
                 </details>
               </section>
@@ -1841,10 +1934,10 @@ function App() {
               <b>Information modes.</b> Both modes simulate actual teams. Masked
               mode restricts critic inputs, but simulated outcomes can leak
               hindsight. Oracle gives the critic both private observations;
-              full-information calibration has not been validated. Oracle combines
-              both perspective estimates into one complementary payoff matrix.
-              Both modes grade against the equilibrium defense. Selecting a reply
-              displays that specific matchup instead.
+              full-information calibration has not been validated. Oracle
+              combines both perspective estimates into one complementary payoff
+              matrix. Both modes grade against the equilibrium defense.
+              Selecting a reply displays that specific matchup instead.
             </p>
             <p>
               <b>Luck measures actual RNG checks.</b> Hits, critical hits,

@@ -26,18 +26,24 @@ addEventListener("message", ({ source, origin, data }) => {
       battle &&
       previous.id === data.id &&
       previous.side === data.side &&
+      previous.oracle === data.oracle &&
       previous.index === data.index &&
       previous.log.length === data.log.length &&
       previous.log.every((line, i) => data.log[i] === line)
     ) {
       previous = data;
-      if (battle.atQueueEnd) parent.postMessage({ type: "battle-settled", index: data.index }, location.origin);
+      if (battle.atQueueEnd)
+        parent.postMessage(
+          { type: "battle-settled", index: data.index },
+          location.origin,
+        );
       return;
     }
     const continuing =
       battle &&
       previous.id === data.id &&
       previous.side === data.side &&
+      previous.oracle === data.oracle &&
       (data.index < 0 || data.index === previous.index + 1) &&
       data.log.length > previous.log.length &&
       previous.log.every((line, i) => data.log[i] === line);
