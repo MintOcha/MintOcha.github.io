@@ -587,12 +587,6 @@ html {
   outline-offset: -4px;
   border-color: #555;
 }
-.played-label {
-  background: #fff;
-  color: #333;
-  padding: 0 0.25em;
-  border-radius: 2px;
-}
 .action-name {
   display: block;
   font-size: 11px;
