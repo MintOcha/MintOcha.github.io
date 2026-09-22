@@ -675,12 +675,10 @@ async function branch(
   opponentAction: string,
 ) {
   const frame = index < 0 ? branchFrames[-index - 1] : frames[index];
-  const matrix = await analyze(index, perspective, oracle, false);
+  const root = clone(frame.state);
   const chosen: Action[] = [];
-  chosen[perspective] = matrix.rows.find((action) => action.id === ownAction)!;
-  chosen[1 - perspective] = matrix.columns.find(
-    (action) => action.id === opponentAction,
-  )!;
+  chosen[perspective] = actions(root, perspective).find((action) => action.id === ownAction)!;
+  chosen[1 - perspective] = actions(root, 1 - perspective).find((action) => action.id === opponentAction)!;
   if (chosen.some((action) => !action))
     throw new Error("Selected action is not legal in this position");
   const existing = branches.find(

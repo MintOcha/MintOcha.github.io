@@ -561,10 +561,8 @@ function App() {
   function chooseAction(index: number | null, opponentChoice = false) {
     if (
       !matrix ||
-      matrix.provisional ||
       settled !== position?.index ||
-      (matrix.rows[0]?.kind === "pass" && matrix.columns[0]?.kind === "pass") ||
-      (!!busy && !reviewingBattle.current)
+      (matrix.rows[0]?.kind === "pass" && matrix.columns[0]?.kind === "pass")
     )
       return;
     const nextRow = opponentChoice ? row : index;
@@ -582,7 +580,7 @@ function App() {
     if (!autoplay) setPlaying(false);
     if (
       !matrix ||
-      matrix.provisional ||
+      (!pair && matrix.provisional) ||
       !position ||
       position.phase === "ended"
     )
