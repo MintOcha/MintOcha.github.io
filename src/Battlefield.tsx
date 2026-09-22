@@ -45,7 +45,7 @@ export default function Battlefield({
         side,
         log: position.log,
         index: position.index,
-        teams: position.teams,
+        teams: position.teams.map((team, player) => player === side ? team : []),
       },
       location.origin,
     );

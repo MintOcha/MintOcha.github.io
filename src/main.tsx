@@ -219,7 +219,7 @@ function App() {
   const [position, setPosition] = useState<PositionView | null>(null);
   const [matrix, setMatrix] = useState<Matrix | null>(null);
   const [side, setSide] = useState<Side>(0);
-  const [oracle, setOracle] = useState(true);
+  const oracle = false;
   const [positionValue, setPositionValue] = useState<number | null>(null);
   const [battleLog, setBattleLog] = useState("");
   const [playing, setPlaying] = useState(false);
@@ -247,7 +247,7 @@ function App() {
   const evaluationContext = useRef({
     index: 0,
     perspective: 0 as Side,
-    oracle: true,
+    oracle,
   });
   useEffect(() => {
     call<{ backend: string }>("initialize")
@@ -378,7 +378,7 @@ function App() {
   }
   async function openReplay(replay: Replay) {
     setPlaying(false);
-    evaluationContext.current = { index: 0, perspective: 0, oracle: true };
+    evaluationContext.current = { index: 0, perspective: 0, oracle };
     setSettled(null);
     reviewingBattle.current = true;
     setError("");
@@ -393,17 +393,16 @@ function App() {
       setLoaded(result);
       setBranches(result.branches);
       setSide(0);
-      setOracle(true);
-      setPosition(result.positions[0]);
+      setPosition(await call<PositionView>("view", { index: 0, perspective: 0, oracle }));
       setRow(null);
       setCol(null);
       setBusy("Analysing replay positions…");
       const overview = await call<AnalysisPoint[]>("overview", {
         perspective: 0,
-        oracle: true,
+        oracle,
       });
       setTimeline(overview);
-      await reviewAll(0, true, 0);
+      await reviewAll(0, oracle, 0);
     } catch (e) {
       setError(String((e as Error).message));
       setBusy("");
@@ -854,18 +853,15 @@ function App() {
                     <option value={1}>{names[1]}</option>
                   </select>
                 </label>
-                <label title="Give the critic both teams’ private information. Experimental: full-information calibration is not established.">
-                  <input
-                    type="checkbox"
-                    checked={oracle}
-                    onChange={(e) => {
-                      setOracle(e.target.checked);
-                      setTimeline([]);
-                      void review(position?.index ?? 0, side, e.target.checked);
-                    }}
-                  />{" "}
-                  Oracle · all revealed
-                </label>
+                <div>
+                  <label>
+                    <input type="checkbox" checked={oracle} disabled aria-describedby="oracle-unavailable" />{" "}
+                    Oracle · all revealed
+                  </label>
+                  <small id="oracle-unavailable" style={{ display: "block" }}>
+                    Unavailable until Oracle model training is complete.
+                  </small>
+                </div>
               </div>
             </section>
             <div className="workspace" ref={workspaceElement}>
