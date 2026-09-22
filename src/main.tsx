@@ -289,6 +289,10 @@ function App() {
     const element = logElement.current;
     if (element) element.scrollTop = element.scrollHeight;
   }, [battleLog]);
+  const previousIndex =
+    position && position.index < 0
+      ? branches.find((branch) => branch.view.index === position.index)?.parent
+      : Math.max(0, (position?.index ?? 0) - 1);
   useEffect(() => {
     if (!playing || busy || !position || !loaded || settled !== position.index)
       return;
@@ -313,15 +317,16 @@ function App() {
         return;
       if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
         event.preventDefault();
-        void review(
-          Math.max(
-            0,
-            Math.min(
-              loaded.positions.length,
-              (position?.index ?? 0) + (event.key === "ArrowRight" ? 1 : -1),
+        if (event.key === "ArrowLeft") {
+          if (previousIndex !== undefined) void review(previousIndex);
+        } else {
+          void review(
+            Math.max(
+              0,
+              Math.min(loaded.positions.length, (position?.index ?? 0) + 1),
             ),
-          ),
-        );
+          );
+        }
       } else if (event.code === "Space") {
         event.preventDefault();
         setPlaying((value) => !value);
@@ -329,7 +334,7 @@ function App() {
     };
     window.addEventListener("keydown", navigate);
     return () => window.removeEventListener("keydown", navigate);
-  }, [loaded, position, side, oracle]);
+  }, [loaded, position, side, oracle, previousIndex]);
   function switchSide(next: Side) {
     setPlaying(false);
     setSide(next);
@@ -935,7 +940,7 @@ function App() {
                     aria-label={`${oracle ? "Oracle" : "Masked"} win probability for ${names[side]} ${positionValue === null ? "unavailable" : percent(positionValue)}`}
                     title={`White: ${names[side]}; black: ${names[opponent]}. ${oracle ? "All information revealed" : "Player-visible information"}.`}
                   >
-                    <span>0%</span>
+                    <span>100%</span>
                     <div className="eval-track">
                       <div
                         style={{
@@ -951,7 +956,7 @@ function App() {
                         {positionValue === null ? "—" : percent(positionValue)}
                       </b>
                     </div>
-                    <span>100%</span>
+                    <span>0%</span>
                   </div>
                   {position && (
                     <Battlefield
@@ -983,9 +988,11 @@ function App() {
                   </button>
                   <button
                     aria-label="Previous turn"
-                    disabled={position?.index === 0}
+                    disabled={
+                      position?.index === 0 || previousIndex === undefined
+                    }
                     onClick={() =>
-                      review(Math.max(0, (position?.index || 0) - 1))
+                      previousIndex !== undefined && void review(previousIndex)
                     }
                   >
                     <ChevronLeft size={17} />
