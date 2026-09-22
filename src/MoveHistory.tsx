@@ -25,7 +25,14 @@ export default function MoveHistory({
   }
   function variations(parent: number) {
     return children.get(parent)?.map((branch) => (
-      <div className="variation" key={branch.view.index}>
+      <div
+        className={
+          parent >= 0 || children.get(parent)!.length > 1
+            ? "variation"
+            : undefined
+        }
+        key={branch.view.index}
+      >
         <button
           className="move-row"
           aria-current={selected === branch.view.index ? "step" : undefined}

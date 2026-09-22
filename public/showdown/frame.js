@@ -22,17 +22,31 @@ addEventListener("message", ({ source, origin, data }) => {
   }
   if (data.type !== "render-battle") return;
   try {
+    if (
+      battle &&
+      previous.id === data.id &&
+      previous.side === data.side &&
+      previous.index === data.index &&
+      previous.log.length === data.log.length &&
+      previous.log.every((line, i) => data.log[i] === line)
+    ) {
+      previous = data;
+      if (battle.atQueueEnd) parent.postMessage({ type: "battle-settled", index: data.index }, location.origin);
+      return;
+    }
     const continuing =
       battle &&
       previous.id === data.id &&
       previous.side === data.side &&
       (data.index < 0 || data.index === previous.index + 1) &&
+      data.log.length > previous.log.length &&
       previous.log.every((line, i) => data.log[i] === line);
     observer?.disconnect();
     if (continuing) {
-      battle.seekTurn(Infinity);
-      battle.pause();
       battle.subscription = null;
+      if (!battle.atQueueEnd) battle.seekTurn(Infinity);
+      battle.stopSeeking();
+      battle.pause();
       for (const line of data.log.slice(previous.log.length)) battle.add(line);
     } else {
       battle?.destroy();
@@ -81,11 +95,14 @@ addEventListener("message", ({ source, origin, data }) => {
         for (const [s, team] of (data.teams || []).entries()) {
           const side = battle.sides[s];
           for (const mon of team) {
-            if (!side.pokemon.some((pokemon) => pokemon.name === mon.name)) {
+            if (
+              mon.details &&
+              !side.pokemon.some((pokemon) => pokemon.name === mon.name)
+            ) {
               const pokemon = side.addPokemon(
                 mon.name,
                 `p${s + 1}: ${mon.name}`,
-                `${mon.species}, L${mon.level}`,
+                mon.details,
               );
               pokemon.hp = mon.hp;
               pokemon.maxhp = mon.maxhp;

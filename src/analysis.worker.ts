@@ -12,6 +12,7 @@ import type {
   Matrix,
   Loaded,
   Branch,
+  Continuation,
 } from "./types";
 import { variationStore } from "./variations";
 import { observeLuck, summarizeLuck } from "./luck";
@@ -92,7 +93,7 @@ function actions(battle: Native, side: number): Action[] {
           });
       }
   }
-  if (!request.active?.[0]?.trapped)
+  if (s.requestState === "switch" || !s.active[0]?.trapped)
     for (const [i, mon] of s.pokemon.entries())
       if (!mon.isActive && !mon.fainted)
         list.push({
@@ -128,6 +129,7 @@ function view(
       return side.pokemon.map((m: Native) => ({
         name: m.name,
         species: m.species.name,
+        details: m.details,
         hp: m.hp,
         maxhp: m.maxhp,
         level: m.level,
@@ -161,7 +163,7 @@ function view(
   return {
     index,
     turn: battle.turn,
-    phase: battle.requestState,
+    phase: battle.ended ? "ended" : battle.requestState,
     teams,
     players: battle.sides.map((s: Native) => s.name),
     actions: battle.sides.map((_: Native, s: number) =>
@@ -485,7 +487,7 @@ async function analyze(
     if (!notify) return;
     const result = await assemble();
     if (notify) {
-      postMessage({ type: "estimate", matrix: result });
+      postMessage({ type: "estimate", index, matrix: result });
       if (!onProgress)
         postMessage({
           type: "progress",
@@ -510,7 +512,8 @@ async function analyze(
       const cell = batch[k];
       cell.count++;
       for (const side of [0, 1] as Side[]) {
-        cell.values[side] = paired[2 * k + side];
+        const p1 = (paired[2 * k] + 1 - paired[2 * k + 1]) / 2;
+        cell.values[side] = oracle ? (side === 0 ? p1 : 1 - p1) : paired[2 * k + side];
         if (
           states[k].sides[side].pokemonLeft <
           frame.state.sides[side].pokemonLeft
@@ -532,8 +535,8 @@ async function analyze(
       cells.reduce((sum, cell) => sum + cell.count, 0) /
       (cells.length * REVIEW.samples);
     const solved = solveMatrix(values);
-    const moveValues = oracle ? solved.worstValues : solved.rowValues;
-    const positionValue = oracle ? solved.safestValue : solved.value;
+    const moveValues = solved.rowValues;
+    const positionValue = solved.value;
     if (solved.exploitability > 1e-5)
       throw new Error(
         "Not graded: payoff equilibrium failed numerical verification.",
@@ -553,12 +556,8 @@ async function analyze(
       }),
     );
     const opponentSolved = solveMatrix(opponentValues);
-    const opponentMoveValues = oracle
-      ? opponentSolved.worstValues
-      : opponentSolved.rowValues;
-    const opponentValue = oracle
-      ? opponentSolved.safestValue
-      : opponentSolved.value;
+    const opponentMoveValues = opponentSolved.rowValues;
+    const opponentValue = opponentSolved.value;
     if (opponentSolved.exploitability > 1e-5)
       throw new Error("Opponent equilibrium failed numerical verification.");
     const opponentRegret =
@@ -567,9 +566,7 @@ async function analyze(
         : Math.max(0, opponentValue - opponentMoveValues[playedCol]);
     const sacrifice = rows.map((row, i) =>
       columns.reduce((sum, column, j) => {
-        const weight = oracle
-          ? Number(j === values[i].indexOf(solved.worstValues[i]))
-          : solved.q[j];
+        const weight = solved.q[j];
         if (!weight) return sum;
         const pair = ["", ""];
         pair[perspective] = row.id;
@@ -585,11 +582,7 @@ async function analyze(
     );
     const opponentSacrifice = columns.map((column, j) =>
       rows.reduce((sum, row, i) => {
-        const weight = oracle
-          ? Number(
-              i === opponentValues[j].indexOf(opponentSolved.worstValues[j]),
-            )
-          : opponentSolved.q[i];
+        const weight = opponentSolved.q[i];
         if (!weight) return sum;
         const pair = ["", ""];
         pair[perspective] = row.id;
@@ -662,7 +655,7 @@ async function analyze(
       luckSwing: frame.luckEvents ? stats.swing : null,
       luckEvents,
       played: [playedRow, playedCol],
-      best: oracle ? solved.best : solved.p.indexOf(Math.max(...solved.p)),
+      best: moveValues.indexOf(Math.max(...moveValues)),
       events: frame.after
         ? channel(frame.after, perspective)
             .slice(channel(frame.state, perspective).length)
@@ -678,14 +671,18 @@ async function branch(
   index: number,
   perspective: Side,
   oracle: boolean,
-  row: number,
-  col: number,
+  ownAction: string,
+  opponentAction: string,
 ) {
   const frame = index < 0 ? branchFrames[-index - 1] : frames[index];
   const matrix = await analyze(index, perspective, oracle, false);
   const chosen: Action[] = [];
-  chosen[perspective] = matrix.rows[row];
-  chosen[1 - perspective] = matrix.columns[col];
+  chosen[perspective] = matrix.rows.find((action) => action.id === ownAction)!;
+  chosen[1 - perspective] = matrix.columns.find(
+    (action) => action.id === opponentAction,
+  )!;
+  if (chosen.some((action) => !action))
+    throw new Error("Selected action is not legal in this position");
   const existing = branches.find(
     (entry) =>
       entry.parent === index &&
@@ -722,6 +719,28 @@ async function branch(
   }
   return result;
 }
+async function continuations(index: number, perspective: Side, oracle: boolean) {
+  const root = await analyze(index, perspective, oracle, false);
+  const ranked = root.rows.map((_, row) => ({ row, value: root.moveValues[row] }))
+    .sort((a, b) => b.value - a.value).slice(0, 3);
+  const lines: Continuation[] = [];
+  for (const candidate of ranked) {
+    const steps: Branch[] = [];
+    let current = index;
+    for (let depth = 0; depth < 2; depth++) {
+      if (cancelled) throw new Error("Analysis cancelled");
+      const matrix = depth === 0 ? root : await analyze(current, perspective, oracle, false);
+      const row = depth === 0 ? candidate.row : matrix.best;
+      const col = matrix.values[row].indexOf(Math.min(...matrix.values[row]));
+      const next = await branch(current, perspective, oracle, matrix.rows[row].id, matrix.columns[col].id);
+      steps.push(next);
+      current = next.view.index;
+      if (next.view.phase === "ended") break;
+    }
+    lines.push({ value: candidate.value, steps });
+  }
+  return lines;
+}
 onmessage = async (event) => {
   const { type, requestId, ...input } = event.data;
   if (type === "cancel") {
@@ -739,10 +758,6 @@ onmessage = async (event) => {
       const f =
         input.index < 0 ? branchFrames[-input.index - 1] : frames[input.index];
       result = view(f, input.index, input.perspective, input.oracle);
-    } else if (type === "evaluation") {
-      const frame =
-        input.index < 0 ? branchFrames[-input.index - 1] : frames[input.index];
-      [result] = await evaluate([frame.state], input.perspective, input.oracle);
     } else if (type === "overview") {
       const states = frames.map((frame) => frame.state);
       const values = await evaluate(states, input.perspective, input.oracle);
@@ -793,13 +808,15 @@ onmessage = async (event) => {
         input.oracle,
         true,
       );
+    } else if (type === "continuations") {
+      result = await continuations(input.index, input.perspective, input.oracle);
     } else if (type === "branch")
       result = await branch(
         input.index,
         input.perspective,
         input.oracle,
-        input.row,
-        input.col,
+        input.ownAction,
+        input.opponentAction,
       );
     else if (type === "timeline") {
       const order = frames.map((_, i) => i);

@@ -40,6 +40,10 @@
     <script src="data/teambuilder-tables.js"></script>
     <script src="js/battle-tooltips.js"></script>
     <script src="js/battle.js"></script>
-    <script src="frame.js"></script>
+    <script>
+      const bridge = document.createElement("script");
+      bridge.src = "frame.js" + location.search;
+      document.body.appendChild(bridge);
+    </script>
   </body>
 </html>

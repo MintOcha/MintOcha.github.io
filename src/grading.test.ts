@@ -10,7 +10,7 @@ test("the best available move has zero regret even in a losing position", () => 
   ]);
   assert(result.exploitability < 1e-6);
   const grades = classifyMoves(result.rowValues, result.value, [0, 0]);
-  assert.equal(grades[0].label, "Best");
+  assert.equal(grades[0].label, "Great");
   assert.equal(grades[1].label, "Mistake");
 });
 
@@ -33,14 +33,20 @@ test("Brilliant requires sound sacrifice evidence and a meaningful safer alterna
   );
   assert.equal(
     classifyMoves([0.65, 0.55], 0.65, [0.05, 0.05])[0].label,
-    "Best",
+    "Great",
   );
   assert.equal(classifyMoves([0.65, 0.64], 0.65, [0.7, 0.05])[0].label, "Best");
-  assert.equal(classifyMoves([0.4, 0.3], 0.4, [0.7, 0.05])[0].label, "Best");
+  assert.equal(classifyMoves([0.4, 0.3], 0.4, [0.7, 0.05])[0].label, "Great");
   assert.equal(
     classifyMoves([0.65, 0.75], 0.75, [0.7, 0.05])[0].label,
     "Mistake",
   );
+});
+
+test("Great requires alternatives and exactly one good choice", () => {
+  assert.equal(classifyMoves([0.5], 0.5, [0])[0].label, "Best");
+  assert.equal(classifyMoves([0.5, 0.485], 0.5, [0, 0])[0].label, "Best");
+  assert.equal(classifyMoves([0.5, 0.47], 0.5, [0, 0])[0].label, "Great");
 });
 
 test("one blunder costs more than equally sized aggregate good-move losses", () => {

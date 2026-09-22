@@ -62,7 +62,7 @@ export default function Battlefield({
       <iframe
         ref={frame}
         title="Pokémon Showdown battlefield"
-        src="/showdown/frame.html"
+        src="/showdown/frame.html?v=settled-2"
       />
       {error && <p role="alert">Battle renderer: {error}</p>}
     </div>

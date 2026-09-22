@@ -17,6 +17,7 @@ export interface Action {
 export interface PokemonView {
   name: string;
   species: string;
+  details?: string;
   hp: number;
   maxhp: number;
   level: number;
@@ -109,6 +110,10 @@ export interface Branch {
   parent: number;
   actions: Action[];
   view: PositionView;
+}
+export interface Continuation {
+  value: number;
+  steps: Branch[];
 }
 export interface Loaded {
   replay: Replay;

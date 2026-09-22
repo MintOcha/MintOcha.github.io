@@ -521,6 +521,14 @@ html {
   margin: 0;
   flex-wrap: wrap;
 }
+.luck-events-panel {
+  margin-top: 1em;
+}
+.luck-events-panel .luck-event {
+  text-align: left;
+}
+.best-lines article { border-bottom: 1px solid var(--border); margin-bottom: 0.75em; }
+.best-lines article header { display: flex; justify-content: space-between; padding: 0.4em; }
 .action-grid,
 .reply-grid {
   display: flex;
@@ -751,6 +759,7 @@ html {
 .brilliant {
   color: #237b83;
 }
+.great { color: var(--blue); }
 .best,
 .excellent,
 .good,
@@ -806,6 +815,66 @@ html {
   font-size: 11px;
   margin-top: 13px;
   padding: 8px;
+}
+.continuation-controls {
+  display: flex;
+  gap: 0.5em;
+}
+.continuation-controls .continue-button {
+  flex: 1;
+}
+.best-next {
+  background: #e4effb;
+  color: #20578a;
+  border-color: #82a9ce;
+}
+.best-until {
+  background: #e3f2e5;
+  color: #276334;
+  border-color: #83b48c;
+}
+.played-grades {
+  display: flex;
+  gap: 1em;
+  padding: 0.4em 0.75em;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+.played-grades > div {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  flex: 1;
+  min-width: 0;
+}
+.played-grades > div:last-child {
+  justify-content: flex-end;
+  text-align: right;
+}
+.played-grades span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.played-grades .grade-icon {
+  width: 1.3em;
+  height: 1.3em;
+  flex-shrink: 0;
+  font-size: inherit;
+}
+.luck-own {
+  --player-color: var(--eval-blue);
+}
+.luck-opponent {
+  --player-color: var(--eval-red);
+}
+.luck-counts tbody th {
+  border-left: 2px solid var(--player-color);
+}
+.luck-counts .luck-player th {
+  color: var(--player-color);
+  background: color-mix(in srgb, var(--player-color) 8%, white);
+  text-align: left;
 }
 .fineprint {
   font-size: 9px;
