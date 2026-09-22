@@ -92,7 +92,7 @@ function actions(battle: Native, side: number): Action[] {
           });
       }
   }
-  if (!request.active?.[0]?.trapped)
+  if (s.requestState === "switch" || !s.active[0]?.trapped)
     for (const [i, mon] of s.pokemon.entries())
       if (!mon.isActive && !mon.fainted)
         list.push({
