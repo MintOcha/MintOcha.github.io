@@ -613,7 +613,9 @@ function App() {
     const r = pair?.row ?? matrix.best;
     const c =
       pair?.col ??
-      matrix.opponentMoveValues.indexOf(Math.max(...matrix.opponentMoveValues));
+      (scoring === "safety"
+        ? matrix.values[r].indexOf(Math.min(...matrix.values[r]))
+        : matrix.opponentMoveValues.indexOf(Math.max(...matrix.opponentMoveValues)));
     setRow(null);
     setCol(null);
     reviewingBattle.current = false;
