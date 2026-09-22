@@ -1609,6 +1609,21 @@ function App() {
                     })}
                   </tbody>
                 </table>
+                <details className="note">
+                  <summary>How grades work</summary>
+                  <small>
+                    Review score = 100 × exp(−5 × root-mean-square regret).
+                    Squared losses penalize blunders more than small
+                    inaccuracies. Unobserved decisions are excluded. This is not
+                    Chess.com’s proprietary CAPS2 formula. Thresholds: Best
+                    &lt;0.5 pp; Excellent &lt;1 pp; Good &lt;2 pp; Inaccuracy
+                    &lt;5 pp; Mistake &lt;12 pp; Blunder ≥12 pp. These are
+                    product conventions, not calibrated skill ratings. Brilliant
+                    is a low-regret sacrifice: ≥50% expected chance of losing a
+                    Pokémon, ≥5 pp better than every low-sacrifice alternative,
+                    and 50–95% expected win value.
+                  </small>
+                </details>
               </section>
             </div>
             <section className="panel matrix-panel">
