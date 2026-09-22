@@ -28,6 +28,7 @@ let engine: Native;
 let replay: Replay;
 let frames: Frame[] = [];
 let cancelled = false;
+let scoring: "safety" | "nash" = "safety";
 let branchFrames: Frame[] = [];
 let branches: Branch[] = [];
 interface Matchup {
@@ -535,8 +536,8 @@ async function analyze(
       cells.reduce((sum, cell) => sum + cell.count, 0) /
       (cells.length * REVIEW.samples);
     const solved = solveMatrix(values);
-    const moveValues = solved.rowValues;
-    const positionValue = solved.value;
+    const moveValues = scoring === "safety" ? solved.worstValues : solved.rowValues;
+    const positionValue = scoring === "safety" ? solved.safestValue : solved.value;
     if (solved.exploitability > 1e-5)
       throw new Error(
         "Not graded: payoff equilibrium failed numerical verification.",
@@ -556,8 +557,8 @@ async function analyze(
       }),
     );
     const opponentSolved = solveMatrix(opponentValues);
-    const opponentMoveValues = opponentSolved.rowValues;
-    const opponentValue = opponentSolved.value;
+    const opponentMoveValues = scoring === "safety" ? opponentSolved.worstValues : opponentSolved.rowValues;
+    const opponentValue = scoring === "safety" ? opponentSolved.safestValue : opponentSolved.value;
     if (opponentSolved.exploitability > 1e-5)
       throw new Error("Opponent equilibrium failed numerical verification.");
     const opponentRegret =
@@ -566,7 +567,9 @@ async function analyze(
         : Math.max(0, opponentValue - opponentMoveValues[playedCol]);
     const sacrifice = rows.map((row, i) =>
       columns.reduce((sum, column, j) => {
-        const weight = solved.q[j];
+        const weight = scoring === "safety"
+          ? Number(j === values[i].indexOf(solved.worstValues[i]))
+          : solved.q[j];
         if (!weight) return sum;
         const pair = ["", ""];
         pair[perspective] = row.id;
@@ -582,7 +585,9 @@ async function analyze(
     );
     const opponentSacrifice = columns.map((column, j) =>
       rows.reduce((sum, row, i) => {
-        const weight = opponentSolved.q[i];
+        const weight = scoring === "safety"
+          ? Number(i === opponentValues[j].indexOf(opponentSolved.worstValues[j]))
+          : opponentSolved.q[i];
         if (!weight) return sum;
         const pair = ["", ""];
         pair[perspective] = row.id;
@@ -645,6 +650,7 @@ async function analyze(
       p: solved.p,
       q: solved.q,
       value: positionValue,
+      nashValue: solved.value,
       exploitability: solved.exploitability,
       mode: oracle ? "oracle" : "masked",
       perspective,
@@ -655,7 +661,7 @@ async function analyze(
       luckSwing: frame.luckEvents ? stats.swing : null,
       luckEvents,
       played: [playedRow, playedCol],
-      best: moveValues.indexOf(Math.max(...moveValues)),
+      best: scoring === "safety" ? solved.best : moveValues.indexOf(Math.max(...moveValues)),
       events: frame.after
         ? channel(frame.after, perspective)
             .slice(channel(frame.state, perspective).length)
@@ -751,6 +757,12 @@ onmessage = async (event) => {
     if (type === "initialize") {
       const runtime = await initializeCritic();
       result = { backend: runtime.backend };
+    } else if (type === "scoring") {
+      if (input.scoring !== "safety" && input.scoring !== "nash")
+        throw new Error("Unknown scoring mode");
+      scoring = input.scoring;
+      cache.clear();
+      result = { scoring };
     } else if (type === "load") result = await load(input.replay);
     else if (type === "view") {
       const f =

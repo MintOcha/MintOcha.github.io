@@ -9,7 +9,7 @@ test("the best available move has zero regret even in a losing position", () => 
     [0.3, 0.25],
   ]);
   assert(result.exploitability < 1e-6);
-  const grades = classifyMoves(result.rowValues, result.value, [0, 0]);
+  const grades = classifyMoves(result.worstValues, result.safestValue, [0, 0]);
   assert.equal(grades[0].label, "Great");
   assert.equal(grades[1].label, "Mistake");
 });
@@ -23,6 +23,21 @@ test("mixed equilibrium support is not mistaken for a bad move", () => {
   assert.deepEqual(
     classifyMoves(result.rowValues, result.value, [0, 0]).map((g) => g.label),
     ["Best", "Best"],
+  );
+});
+
+test("safety grading rejects a losing reply even when Nash assigns the move value", () => {
+  const result = solveMatrix([
+    [0, 0.3744623064994812],
+    [0.41429659724235535, 0.2759636640548706],
+  ]);
+  assert(result.rowValues[0] > 0.3);
+  assert.equal(result.worstValues[0], 0);
+  assert.equal(result.best, 1);
+  assert.equal(result.safestValue, 0.2759636640548706);
+  assert.deepEqual(
+    classifyMoves(result.worstValues, result.safestValue, [1, 0]).map(g => g.label),
+    ["Blunder", "Great"],
   );
 });
 

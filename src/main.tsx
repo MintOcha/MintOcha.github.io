@@ -238,6 +238,8 @@ function App() {
   const [lines, setLines] = useState<Continuation[]>([]);
   const linesPosition = useRef("");
   const [settings, setSettings] = useState(false);
+  const [scoring, setScoring] = useState<"safety" | "nash">("safety");
+  const [changingScoring, setChangingScoring] = useState(false);
   const [help, setHelp] = useState(false);
   const [replayIndex, setReplayIndex] = useState(0);
   const file = useRef<HTMLInputElement>(null);
@@ -440,6 +442,29 @@ function App() {
       );
     }
     return token;
+  }
+  async function changeScoring(next: "safety" | "nash") {
+    setChangingScoring(true);
+    setPlaying(false);
+    try {
+      const token = await interruptReview();
+      if (token !== latest.current) return;
+      setMatrix(null);
+      setLines([]);
+      linesPosition.current = "";
+      setPositionValue(null);
+      setTimeline([]);
+      await call("scoring", { scoring: next });
+      setScoring(next);
+      if (loaded) {
+        setTimeline(await call<AnalysisPoint[]>("overview", { perspective: side, oracle }));
+        await review(position?.index ?? 0);
+      }
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
+      setChangingScoring(false);
+    }
   }
   async function review(
     index: number,
@@ -772,6 +797,11 @@ function App() {
         {settings && (
           <section className="settings">
             <b>Analysis settings</b>
+            <label>
+              <input type="checkbox" checked={scoring === "nash"} disabled={changingScoring} onChange={(event) => void changeScoring(event.target.checked ? "nash" : "safety")} />{" "}
+              Use Nash scoring
+            </label>
+            <span>{scoring === "safety" ? "Safety scores: each move faces its strongest reply. Grades measure safety lost." : "Nash scores: each move faces the equilibrium mixture. Grades measure value lost against that mixture."}</span>
             <span>
               Fixed-seed review. Each action pair is simulated once, without
               rerolls.
@@ -949,7 +979,7 @@ function App() {
                 <div className="battle-body">
                   <div
                     className="eval-bar"
-                    aria-label={`${oracle ? "Oracle" : "Masked"} win probability for ${names[side]} ${positionValue === null ? "unavailable" : percent(positionValue)}`}
+                    aria-label={`${scoring === "safety" ? "Safety score" : "Nash evaluation"} for ${names[side]} ${positionValue === null ? "unavailable" : percent(positionValue)}`}
                     title={`White: ${names[side]}; black: ${names[opponent]}. ${oracle ? "All information revealed" : "Player-visible information"}.`}
                   >
                     <span>100%</span>
@@ -1237,7 +1267,7 @@ function App() {
                         </div>
                         <section className="best-lines" aria-label="Best lines">
                           <h3>Best lines</h3>
-                          <p className="note">Each line shows the strongest reply to that move; its percentage evaluates the first action pair. Move grades use the opponent’s Nash mixture instead. Up to two decisions shown, evaluated one turn at a time.</p>
+                          <p className="note">Each line shows the strongest reply to that move; its percentage evaluates the first action pair. {scoring === "nash" ? "Move grades use the opponent’s Nash mixture instead. " : "Move grades compare safety scores. "}Up to two decisions shown, evaluated one turn at a time.</p>
                           {!lines.length && <p role="status">{position?.phase === "ended" ? "Battle ended" : "Finding best lines…"}</p>}
                           {lines.map((line, rank) => (
                             <article key={rank}>
@@ -1280,7 +1310,7 @@ function App() {
             <section className="panel timeline-panel">
               <div className="panel-title">
                 <b>
-                  Win probability <small>— {names[side]}'s perspective</small>
+                  {scoring === "safety" ? "Safety score" : "Nash evaluation"} <small>— {names[side]}'s perspective</small>
                 </b>
                 <div className="legend">
                   <span>
@@ -1303,7 +1333,7 @@ function App() {
                 <svg
                   viewBox="0 0 1000 130"
                   preserveAspectRatio="none"
-                  aria-label="Win probability by decision"
+                  aria-label={`${scoring === "safety" ? "Safety score" : "Nash evaluation"} by decision`}
                 >
                   <line x1="0" x2="1000" y1="65" y2="65" className="gridline" />
                   <line x1="0" x2="1000" y1="5" y2="5" className="gridline" />
@@ -1674,8 +1704,8 @@ function App() {
               {showMatrix && matrix && (
                 <>
                   <p>
-                    Your win estimate after each pair. Click to select both
-                    actions.
+                    Your win estimate after each pair. Click to select both actions.
+                    Nash mixtures and their game value below are separate from safety scores.
                   </p>
                   <div className="matrix-scroll">
                     <table>
@@ -1693,7 +1723,7 @@ function App() {
                               </button>
                             </th>
                           ))}
-                          <th>Mix</th>
+                          <th>Nash mix</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1735,14 +1765,14 @@ function App() {
                       </tbody>
                       <tfoot>
                         <tr>
-                          <th>Opponent mix</th>
+                          <th>Opponent Nash mix</th>
                           {matrix.q.map((q, i) => (
                             <td key={i}>
                               {matrix.provisional ? "…" : percent(q)}
                             </td>
                           ))}
-                          <td>
-                            {matrix.provisional ? "…" : percent(matrix.value)}
+                          <td title="Nash game value">
+                            {matrix.provisional ? "…" : percent(matrix.nashValue)}
                           </td>
                         </tr>
                       </tfoot>
@@ -1843,8 +1873,11 @@ function App() {
               hindsight. Oracle gives the critic both private observations;
               full-information calibration has not been validated. Oracle combines
               both perspective estimates into one complementary payoff matrix.
-              Both modes grade against the equilibrium defense. Selecting a reply
-              displays that specific matchup instead.
+              Safety scoring grades each move against its strongest reply and compares
+              it with the safest available move. The main score is that safest move’s value.
+              This conservative score can undervalue predictions and mixed strategies.
+              Settings offers Nash scoring against the equilibrium defense instead.
+              Selecting an action displays the individual matchups, not safety grades.
             </p>
             <p>
               <b>Luck measures actual RNG checks.</b> Hits, critical hits,
