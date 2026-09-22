@@ -540,11 +540,12 @@ html {
 .reply-grid {
   display: flex;
   flex-direction: column;
+  --action-min-width: 7em;
   gap: 0.5em;
 }
 .move-buttons {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--action-min-width)), 1fr));
   gap: 0.4em;
 }
 .move-buttons:empty {
@@ -556,7 +557,7 @@ html {
   gap: 0.35em;
 }
 .switch-buttons .action {
-  flex: 1 1 5em;
+  flex: 1 1 var(--action-min-width);
   padding: 0.15em 0.3em;
   min-height: 0;
 }
@@ -590,8 +591,6 @@ html {
     border-color 0.1s;
 }
 .action.played {
-  outline: 2px solid #fff;
-  outline-offset: -4px;
   border-color: #555;
 }
 .action-name {
@@ -604,7 +603,7 @@ html {
 }
 .action-detail {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 3px;
   align-items: center;
   font-size: 9px;
@@ -615,7 +614,7 @@ html {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   max-width: 100%;
   margin-left: auto;
@@ -689,8 +688,10 @@ html {
   box-shadow: inset 0 0 0 1px white;
 }
 .action.best-response:not(.selected) {
-  border-color: #67904f;
   box-shadow: inset 3px 0 #729d56;
+}
+.action.best-response:not(.selected):not(.played) {
+  border-color: #67904f;
 }
 .reply-grid {
   max-height: none;
@@ -1525,9 +1526,6 @@ footer .plain {
   }
   .reply-grid .action-detail {
     font-size: 8px;
-  }
-  .reply-grid .action-detail b {
-    font-size: 9px;
   }
   .bottom-grid {
     grid-template-columns: 1fr;
