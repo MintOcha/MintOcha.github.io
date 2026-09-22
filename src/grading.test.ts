@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { classifyMoves } from "./grading";
+import { accuracy, classifyMoves } from "./grading";
 import { solveMatrix } from "./matrix";
 
 test("the best available move has zero regret even in a losing position", () => {
@@ -41,4 +41,15 @@ test("Brilliant requires sound sacrifice evidence and a meaningful safer alterna
     classifyMoves([0.65, 0.75], 0.75, [0.7, 0.05])[0].label,
     "Mistake",
   );
+});
+
+test("one blunder costs more than equally sized aggregate good-move losses", () => {
+  const perfect = Array(19).fill(0);
+  assert.equal(accuracy([]), null);
+  assert.equal(accuracy(perfect), 100);
+  const good = accuracy([...perfect, 0.015])!;
+  const blunder = accuracy([...perfect, 0.2])!;
+  assert(blunder < good);
+  assert(blunder < accuracy(Array(20).fill(0.01))!);
+  assert(accuracy([...perfect, 0.4])! < blunder);
 });

@@ -43,6 +43,14 @@ export interface PositionView {
   weather: string;
   log: string[];
 }
+export interface LuckEvent {
+  kind: string;
+  side: Side;
+  label: string;
+  probability: number;
+  occurred: boolean;
+  favorable: boolean;
+}
 export interface Matrix {
   provisional: boolean;
   approximate: boolean;
@@ -74,8 +82,9 @@ export interface Matrix {
   regret: number | null;
   opponentRegret: number | null;
   luck: number | null;
-  realized: number | null;
-  expected: number | null;
+  luckVariance: number | null;
+  luckSwing: number | null;
+  luckEvents: LuckEvent[];
   played: number[];
   best: number;
   events: string[];
@@ -88,27 +97,23 @@ export interface AnalysisPoint {
   events?: string[];
   value: number;
   luck: number | null;
+  luckVariance: number | null;
+  luckSwing: number | null;
+  luckEvents: LuckEvent[];
   regret: number | null;
   opponentRegret: number | null;
   grade?: string;
   opponentGrade?: string;
 }
-export interface Outcome {
-  label: string;
-  probability: number;
-  value: number;
-  key: string;
-}
 export interface Branch {
-  approximate: boolean;
+  parent: number;
+  actions: Action[];
   view: PositionView;
-  outcomes: Outcome[];
-  value: number;
-  label: string;
 }
 export interface Loaded {
   replay: Replay;
   positions: PositionView[];
+  branches: Branch[];
   outcome: { winner: string; value: number } | null;
   verified: boolean;
   revision: string;

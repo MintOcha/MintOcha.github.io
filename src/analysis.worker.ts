@@ -11,20 +11,24 @@ import type {
   PositionView,
   Matrix,
   Loaded,
-  Outcome,
+  Branch,
 } from "./types";
+import { variationStore } from "./variations";
+import { observeLuck, summarizeLuck } from "./luck";
 
 type Native = any;
 interface Frame {
   state: Native;
   played: string[];
   after?: Native;
+  luckEvents?: import("./types").LuckEvent[];
 }
 let engine: Native;
 let replay: Replay;
 let frames: Frame[] = [];
 let cancelled = false;
 let branchFrames: Frame[] = [];
+let branches: Branch[] = [];
 interface Matchup {
   pair: string[];
   values: number[];
@@ -222,6 +226,7 @@ async function load(input: Replay): Promise<Loaded> {
   evaluations.clear();
   evaluationCacheBytes = 0;
   branchFrames = [];
+  branches = [];
   class ReplayStream extends engine.BattleStream {
     constructor() {
       super({ keepAlive: true, noCatch: true });
@@ -278,9 +283,24 @@ async function load(input: Replay): Promise<Loaded> {
       "Replay reconstruction diverged from every supported replay channel. Analysis stopped rather than grading the wrong state.",
     );
   if (!frames.length) throw new Error("No playable decisions in this replay.");
+  const warnings: string[] = [];
+  try {
+    const saved = await variationStore<{
+      inputlog: string;
+      frames: Frame[];
+      branches: Branch[];
+    }>(`${revision}:${input.id}`);
+    if (saved?.inputlog === input.inputlog) {
+      branchFrames = saved.frames;
+      branches = saved.branches;
+    }
+  } catch {
+    warnings.push("Saved variations could not be loaded from this browser.");
+  }
   return {
     replay: input,
     positions: frames.map((f, i) => view(f, i, 0, true)),
+    branches,
     outcome: stream.battle.ended
       ? {
           winner: stream.battle.winner || "Tie",
@@ -291,7 +311,7 @@ async function load(input: Replay): Promise<Loaded> {
       : null,
     verified,
     revision,
-    warnings: [],
+    warnings,
   };
 }
 function apply(battle: Native, pair: string[]) {
@@ -587,14 +607,21 @@ async function analyze(
       opponentValue,
       opponentSacrifice,
     );
-    let expected: number | null = null,
-      realized: number | null = null,
-      luck: number | null = null;
-    if (!provisional && frame.after && playedRow >= 0 && playedCol >= 0) {
-      expected = values[playedRow][playedCol];
-      [realized] = await evaluate([frame.after], perspective, oracle);
-      luck = realized - expected;
+    if (!provisional && frame.after && !frame.luckEvents) {
+      const battle = clone(frame.state);
+      const events = observeLuck(battle, clone);
+      apply(battle, frame.played);
+      if (
+        JSON.stringify(comparison(battle.log)) !==
+        JSON.stringify(comparison(frame.after.log))
+      )
+        throw new Error(
+          "RNG event reconstruction diverged from the recorded turn.",
+        );
+      frame.luckEvents = events;
     }
+    const luckEvents = frame.luckEvents ?? [];
+    const stats = summarizeLuck(luckEvents, perspective);
     const result: Matrix = {
       provisional,
       approximate: true,
@@ -630,9 +657,10 @@ async function analyze(
       perspective,
       regret: provisional ? null : regret,
       opponentRegret: provisional ? null : opponentRegret,
-      luck,
-      expected,
-      realized,
+      luck: stats.score,
+      luckVariance: frame.luckEvents ? stats.variance : null,
+      luckSwing: frame.luckEvents ? stats.swing : null,
+      luckEvents,
       played: [playedRow, playedCol],
       best: oracle ? solved.best : solved.p.indexOf(Math.max(...solved.p)),
       events: frame.after
@@ -655,41 +683,44 @@ async function branch(
 ) {
   const frame = index < 0 ? branchFrames[-index - 1] : frames[index];
   const matrix = await analyze(index, perspective, oracle, false);
-  const pair = ["", ""];
-  pair[perspective] = matrix.rows[row].id;
-  pair[1 - perspective] = matrix.columns[col].id;
-  const successorsList = [
-    { state: snapshot(rollout(frame.state, pair)), probability: 1 },
-  ];
-  const values = await evaluate(
-    successorsList.map((o) => o.state),
-    perspective,
-    oracle,
+  const chosen: Action[] = [];
+  chosen[perspective] = matrix.rows[row];
+  chosen[1 - perspective] = matrix.columns[col];
+  const existing = branches.find(
+    (entry) =>
+      entry.parent === index &&
+      entry.actions.every((action, side) => action.id === chosen[side].id),
   );
-  const outcomes: Outcome[] = successorsList
-    .map((o, i) => {
-      const next = clone(o.state);
-      return {
-        label: next.sides
-          .map(
-            (s: Native) =>
-              `${s.active[0].species.name} ${s.active[0].hp}/${s.active[0].maxhp}${s.active[0].status ? " " + s.active[0].status : ""}`,
-          )
-          .join(" / "),
-        probability: o.probability,
-        value: values[i],
-        key: String(branchFrames.push({ state: o.state, played: ["", ""] })),
-      };
-    })
-    .sort((a, b) => b.probability - a.probability);
-  const selected = -Number(outcomes[0].key);
-  return {
-    view: view(branchFrames[-selected - 1], selected, perspective, oracle),
-    outcomes,
-    approximate: true,
-    value: matrix.values[row][col],
-    label: `${matrix.rows[row].label} / ${matrix.columns[col].label}`,
+  if (existing) return existing;
+  const state = snapshot(
+    rollout(
+      frame.state,
+      chosen.map((action) => action.id),
+    ),
+  );
+  const next = { state, played: ["", ""] };
+  const selected = -branchFrames.push(next);
+  const result: Branch = {
+    parent: index,
+    actions: chosen,
+    view: view(next, selected, perspective, oracle),
   };
+  branches.push(result);
+  try {
+    const revision = /(?:^|\n)>version ([^\n]+)/
+      .exec(replay.inputlog!)?.[1]
+      ?.trim();
+    await variationStore(`${revision}:${replay.id}`, {
+      inputlog: replay.inputlog,
+      frames: branchFrames,
+      branches,
+    });
+  } catch (error) {
+    branches.pop();
+    branchFrames.pop();
+    throw new Error(`Could not save variation: ${(error as Error).message}`);
+  }
+  return result;
 }
 onmessage = async (event) => {
   const { type, requestId, ...input } = event.data;
@@ -744,11 +775,14 @@ onmessage = async (event) => {
           provisional: !matrix,
           approximate: matrix?.approximate,
           luck: matrix?.luck ?? null,
+          luckVariance: matrix?.luckVariance ?? null,
+          luckSwing: matrix?.luckSwing ?? null,
           regret: matrix?.regret ?? null,
           opponentRegret: matrix?.opponentRegret ?? null,
           grade: matrix?.grades[matrix.played[0]]?.label,
           opponentGrade: matrix?.opponentGrades[matrix.played[1]]?.label,
           events: matrix?.events,
+          luckEvents: matrix?.luckEvents ?? [],
         });
       }
       result = points;
@@ -807,11 +841,14 @@ onmessage = async (event) => {
               approximate: result.approximate,
               value: result.value,
               luck: result.luck,
+              luckVariance: result.luckVariance,
+              luckSwing: result.luckSwing,
               regret: result.regret,
               opponentRegret: result.opponentRegret,
               grade: result.grades[result.played[0]]?.label,
               opponentGrade: result.opponentGrades[result.played[1]]?.label,
               events: result.events,
+              luckEvents: result.luckEvents,
             },
           });
           postMessage({

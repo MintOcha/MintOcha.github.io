@@ -1,7 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Sprites, Icons } from "@pkmn/img";
 import Battlefield from "./Battlefield";
+import MoveHistory from "./MoveHistory";
+import { accuracy } from "./grading";
+import { summarizeLuck } from "./luck";
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,7 +13,6 @@ import {
   Link,
   Settings,
   Info,
-  RotateCcw,
   Play,
   Pause,
   ArrowLeftRight,
@@ -35,6 +37,10 @@ import type {
 import { GRADES, grade, percent, points } from "./types";
 import "./style.css";
 
+const luckLabel = (value: number | null) =>
+  value === null
+    ? "No chance events"
+    : `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(1)}σ`;
 const worker = new Worker(new URL("./analysis.worker.ts", import.meta.url), {
   type: "module",
 });
@@ -78,31 +84,6 @@ function GradeIcon({
   );
 }
 
-function eventSummary(events: string[]) {
-  const labels: string[] = [];
-  let move = "";
-  const name = (ident: string = "") => ident.split(": ").slice(1).join(": ");
-  for (const event of events) {
-    const [, kind, actor, effect] = event.split("|");
-    if (kind === "move") move = `${name(actor)} · ${effect}`;
-    if (kind === "-crit") labels.push(`${move} · critical hit`);
-    if (kind === "-miss") labels.push(`${move} · missed`);
-    if (kind === "cant")
-      labels.push(
-        `${name(actor)} · ${effect === "par" ? "fully paralyzed" : effect === "slp" ? "asleep" : effect === "frz" ? "frozen" : effect === "flinch" ? "flinched" : effect}`,
-      );
-    if (kind === "-status") labels.push(`${name(actor)} · ${effect}`);
-  }
-  return labels.length
-    ? [...new Set(labels)].join("; ")
-    : events
-        .filter((event) => event.startsWith("|move|"))
-        .map((event) => {
-          const [, , actor, move] = event.split("|");
-          return `${name(actor)} · ${move}`;
-        })
-        .join(" / ");
-}
 function ActionButton({
   action,
   selected,
@@ -244,6 +225,7 @@ function App() {
   const [playing, setPlaying] = useState(false);
   const [settled, setSettled] = useState<number | null>(null);
   const logElement = useRef<HTMLDivElement>(null);
+  const workspaceElement = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState("");
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
@@ -285,6 +267,24 @@ function App() {
     worker.addEventListener("message", listener);
     return () => worker.removeEventListener("message", listener);
   }, []);
+  useLayoutEffect(() => {
+    const element = workspaceElement.current;
+    if (!element) return;
+    let width = element.clientWidth;
+    let height = element.getBoundingClientRect().height;
+    element.style.minHeight = `${height}px`;
+    const observer = new ResizeObserver(() => {
+      if (element.clientWidth !== width) {
+        width = element.clientWidth;
+        height = 0;
+        element.style.minHeight = "";
+      }
+      height = Math.max(height, element.getBoundingClientRect().height);
+      element.style.minHeight = `${height}px`;
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [loaded]);
   useEffect(() => {
     const element = logElement.current;
     if (element) element.scrollTop = element.scrollHeight;
@@ -334,8 +334,7 @@ function App() {
     setPlaying(false);
     setSide(next);
     setTimeline([]);
-    setBranches([]);
-    void review(Math.max(0, position?.index ?? 0), next, oracle);
+    void review(position?.index ?? 0, next, oracle);
   }
   async function openReplay(replay: Replay) {
     setPlaying(false);
@@ -351,6 +350,7 @@ function App() {
     try {
       const result = await call<Loaded>("load", { replay });
       setLoaded(result);
+      setBranches(result.branches);
       setSide(0);
       setOracle(true);
       setPosition(result.positions[0]);
@@ -417,6 +417,12 @@ function App() {
   ) {
     if (!autoplay) setPlaying(false);
     setSettled(null);
+    const immediate =
+      index >= 0
+        ? loaded?.positions[index]
+        : branches.find((branch) => branch.view.index === index)?.view;
+    if (immediate && perspective === side && reveal === oracle && oracle)
+      setPosition(immediate);
     const token = await interruptReview();
     if (token !== latest.current) return;
     setError("");
@@ -488,6 +494,9 @@ function App() {
               approximate: result.approximate,
               value: result.value,
               luck: result.luck,
+              luckVariance: result.luckVariance,
+              luckSwing: result.luckSwing,
+              luckEvents: result.luckEvents,
               regret: result.regret,
               opponentRegret: result.opponentRegret,
               grade: result.grades[result.played[0]]?.label,
@@ -564,8 +573,11 @@ function App() {
         col: c,
       });
       if (token !== latest.current) return;
-      setBranches((old) => [...old, branch]);
-      setTab("review");
+      setBranches((old) =>
+        old.some((entry) => entry.view.index === branch.view.index)
+          ? old
+          : [...old, branch],
+      );
       await review(branch.view.index);
     } catch (e) {
       if ((e as Error).message !== "Analysis cancelled")
@@ -628,55 +640,49 @@ function App() {
           : matrix.value
     : (timeline.find((point) => point.index === position?.index)?.value ??
       null);
-  const topLines =
-    matrix && !matrix.provisional
-      ? matrix.rows
-          .map((action, row) => {
-            const values = matrix.values[row];
-            const col = values.indexOf(Math.min(...values));
-            return {
-              action,
-              row,
-              col,
-              value: values[col],
-            };
-          })
-          .sort(
-            (a, b) =>
-              matrix.moveValues[b.row] - matrix.moveValues[a.row] ||
-              b.value - a.value,
-          )
-          .filter((line) => line.action.kind !== "pass")
-          .slice(0, 3)
-      : [];
-  const netLuck = timeline.reduce((sum, p) => sum + (p.luck ?? 0), 0);
+  const luckVariance = timeline.reduce(
+    (sum, p) => sum + (p.luckVariance ?? 0),
+    0,
+  );
+  const luckSwing = timeline.reduce((sum, p) => sum + (p.luckSwing ?? 0), 0);
+  const netLuck =
+    luckVariance > 1e-12 ? luckSwing / Math.sqrt(luckVariance) : null;
   const reviewed = timeline.filter((point) => !point.provisional);
-  const outcomeMoments = reviewed.filter((point) => point.luck !== null);
+  const chanceEvents = reviewed.flatMap((point) =>
+    point.luckEvents.map((event, eventIndex) => ({
+      ...point,
+      event,
+      eventIndex,
+      luck: summarizeLuck([event], side).score!,
+    })),
+  );
+  const luckGroups = new Map<
+    string,
+    { kind: string; side: Side; events: typeof chanceEvents }
+  >();
+  for (const event of chanceEvents) {
+    const key = `${event.event.side}:${event.event.kind}`;
+    const group = luckGroups.get(key) ?? {
+      kind: event.event.kind,
+      side: event.event.side,
+      events: [],
+    };
+    group.events.push(event);
+    luckGroups.set(key, group);
+  }
   const rankedMoments = [
-    { title: "Best outcomes", sign: 1 },
-    { title: "Worst outcomes", sign: -1 },
+    { title: "Unlucky events", sign: -1 },
+    { title: "Lucky events", sign: 1 },
   ].map((group) => ({
     ...group,
-    moments: outcomeMoments
-      .filter((point) => group.sign * point.luck! > 0)
-      .sort((a, b) => group.sign * (b.luck! - a.luck!)),
+    moments: chanceEvents
+      .filter((point) => group.sign * point.luck >= 1)
+      .sort((a, b) => group.sign * (b.luck - a.luck)),
   }));
   const ownScore = timeline.filter((p) => p.regret !== null);
   const foeScore = timeline.filter((p) => p.opponentRegret !== null);
-  const accuracy = (list: AnalysisPoint[], foe = false) =>
-    list.length
-      ? 100 *
-        Math.exp(
-          (-5 *
-            list.reduce(
-              (s, p) => s + (foe ? p.opponentRegret! : p.regret!),
-              0,
-            )) /
-            list.length,
-        )
-      : null;
-  const a1 = accuracy(ownScore),
-    a2 = accuracy(foeScore, true);
+  const a1 = accuracy(ownScore.map((point) => point.regret!)),
+    a2 = accuracy(foeScore.map((point) => point.opponentRegret!));
   return (
     <>
       <header className="site-header">
@@ -833,19 +839,14 @@ function App() {
                     onChange={(e) => {
                       setOracle(e.target.checked);
                       setTimeline([]);
-                      setBranches([]);
-                      void review(
-                        Math.max(0, position?.index ?? 0),
-                        side,
-                        e.target.checked,
-                      );
+                      void review(position?.index ?? 0, side, e.target.checked);
                     }}
                   />{" "}
                   Oracle · all revealed
                 </label>
               </div>
             </section>
-            <div className="workspace">
+            <div className="workspace" ref={workspaceElement}>
               <section className="battle-panel panel">
                 <div className="panel-title">
                   <b>Battlefield</b>
@@ -993,7 +994,6 @@ function App() {
                     aria-label="Select turn"
                     value={Math.max(0, position?.index || 0)}
                     onChange={(e) => {
-                      setBranches([]);
                       void review(Number(e.target.value));
                     }}
                   >
@@ -1118,7 +1118,6 @@ function App() {
                       className="plain"
                       disabled={!!busy}
                       onClick={() => {
-                        setBranches([]);
                         void review(replayIndex);
                       }}
                     >
@@ -1134,10 +1133,10 @@ function App() {
                     Move review
                   </button>
                   <button
-                    className={tab === "line" ? "active" : ""}
-                    onClick={() => setTab("line")}
+                    className={tab === "moves" ? "active" : ""}
+                    onClick={() => setTab("moves")}
                   >
-                    Continuation {branches.length > 0 && `(${branches.length})`}
+                    Moves {branches.length > 0 && `(${branches.length} saved)`}
                   </button>
                 </div>
                 {tab === "review" && (
@@ -1178,44 +1177,6 @@ function App() {
                             )
                           );
                         })}
-                        {topLines.length > 0 && (
-                          <div className="top-lines">
-                            <b>Best lines</b>
-                            {topLines.map((line) => (
-                              <button
-                                key={line.row}
-                                disabled={!!busy && !reviewingBattle.current}
-                                onClick={() => {
-                                  setRow(line.row);
-                                  setCol(line.col);
-                                  void continueLine(line);
-                                }}
-                              >
-                                <strong title="Score against the strongest reply">
-                                  {percent(line.value)}
-                                </strong>
-                                <span
-                                  title={`${names[side]} / ${names[opponent]}`}
-                                >
-                                  {position?.turn}.{" "}
-                                  {line.action.kind === "switch"
-                                    ? "Switch → "
-                                    : ""}
-                                  {line.action.label}
-                                  {line.action.tera ? " + Tera" : ""}
-                                  {" / … "}
-                                  {matrix.columns[line.col].kind === "switch"
-                                    ? "Switch → "
-                                    : ""}
-                                  {matrix.columns[line.col].label}
-                                  {matrix.columns[line.col].tera
-                                    ? " + Tera"
-                                    : ""}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
                         <dl className="metrics">
                           <div>
                             <dt>
@@ -1238,15 +1199,15 @@ function App() {
                             <dd>{percent(selectedValue!)}</dd>
                           </div>
                           <div>
-                            <dt>Outcome swing</dt>
+                            <dt>Luck</dt>
                             <dd
                               className={
                                 (matrix.luck ?? 0) < 0 ? "negative" : "positive"
                               }
                             >
-                              {matrix.luck === null
+                              {matrix.luckVariance === null
                                 ? "Not available"
-                                : points(matrix.luck)}
+                                : luckLabel(matrix.luck)}
                             </dd>
                           </div>
                         </dl>
@@ -1280,64 +1241,16 @@ function App() {
                     )}
                   </div>
                 )}
-                {tab === "line" && (
-                  <div className="continuations">
-                    <p className="note">
-                      Select a line to explore the next decision.
-                    </p>
-                    {branches.length === 0 && (
-                      <button
-                        disabled={
-                          !matrix ||
-                          matrix.provisional ||
-                          (!!busy && !reviewingBattle.current)
-                        }
-                        onClick={() => void continueLine()}
-                      >
-                        Explore best continuation
-                      </button>
-                    )}
-                    {branches.map((branch, i) => (
-                      <article key={i}>
-                        <div className="line-heading">
-                          <b>
-                            {i + 1}. {branch.label}
-                          </b>
-                          <span>{percent(branch.value)}</span>
-                        </div>
-                        {branch.outcomes.map((o) => (
-                          <button
-                            className="outcome"
-                            key={o.key}
-                            disabled={!!busy}
-                            onClick={() => review(-Number(o.key))}
-                          >
-                            <span>{o.label}</span>
-                            <small>{percent(o.value)}</small>
-                            <ChevronRight size={13} />
-                          </button>
-                        ))}
-                      </article>
-                    ))}
-                    {position && position.index < 0 && (
-                      <button
-                        disabled={!!busy}
-                        onClick={() => void continueLine()}
-                      >
-                        <GitBranch size={14} /> Add next decision
-                      </button>
-                    )}
-                    <button
-                      className="plain"
-                      disabled={!!busy}
-                      onClick={() => {
-                        setBranches([]);
-                        void review(replayIndex);
-                      }}
-                    >
-                      <RotateCcw size={13} /> Return to replay
-                    </button>
-                  </div>
+                {tab === "moves" && loaded && (
+                  <MoveHistory
+                    loaded={loaded}
+                    branches={branches}
+                    selected={position?.index ?? 0}
+                    onSelect={(index) => {
+                      reviewingBattle.current = false;
+                      void review(index);
+                    }}
+                  />
                 )}
               </aside>
             </div>
@@ -1395,7 +1308,7 @@ function App() {
                         onClick={() => review(p.index)}
                         className="chart-point"
                       >
-                        <title>{`Turn ${p.turn}: ${percent(p.value)}${p.provisional ? " · provisional position estimate" : p.approximate ? " · approximate review" : ""}${p.luck === null ? "" : `, luck ${points(p.luck)}`}`}</title>
+                        <title>{`Turn ${p.turn}: ${percent(p.value)}${p.provisional ? " · provisional position estimate" : p.approximate ? " · approximate review" : ""}${p.luck === null ? "" : `, luck ${luckLabel(p.luck)}`}`}</title>
                         {previous && previous.index === p.index - 1 && (
                           <line
                             x1={
@@ -1421,19 +1334,18 @@ function App() {
                           className="probability-dot"
                           opacity={p.provisional ? 0.5 : 1}
                         />
-                        {p.luck !== null && Math.abs(p.luck) > 0.02 && (
-                          <text
-                            x={x}
+                        {p.luck !== null && Math.abs(p.luck) >= 1 && (
+                          <Clover
+                            x={x - 7}
                             y={
                               p.luck > 0
-                                ? Math.max(13, y - 12)
-                                : Math.min(123, y + 18)
+                                ? Math.max(0, y - 25)
+                                : Math.min(109, y + 5)
                             }
-                            textAnchor="middle"
+                            width={14}
+                            height={14}
                             className="luck-marker"
-                          >
-                            ♧
-                          </text>
+                          />
                         )}
                         {(p.regret ?? 0) > 0.02 && (
                           <text
@@ -1527,9 +1439,11 @@ function App() {
                   </b>
                 </div>
                 <div className="luck-total">
-                  <strong className={netLuck < 0 ? "negative" : "positive"}>
-                    {timeline.some((p) => p.luck !== null)
-                      ? points(netLuck)
+                  <strong
+                    className={(netLuck ?? 0) < 0 ? "negative" : "positive"}
+                  >
+                    {timeline.some((p) => p.luckVariance !== null)
+                      ? luckLabel(netLuck)
                       : "—"}
                   </strong>
                   <span>
@@ -1539,36 +1453,81 @@ function App() {
                   </span>
                 </div>
                 <div className="luck-track">
-                  <span>Worse</span>
+                  <span>−2σ</span>
                   <div>
-                    <i style={{ left: `${50 + Math.tanh(netLuck) * 46}%` }} />
+                    <i
+                      style={{
+                        left: `${50 + Math.max(-2, Math.min(2, netLuck ?? 0)) * 23}%`,
+                      }}
+                    />
                     <b />
                   </div>
-                  <span>Better</span>
+                  <span>+2σ</span>
                 </div>
+                <table className="luck-counts">
+                  <thead>
+                    <tr>
+                      <th>Chance checks</th>
+                      <th>Actual / Expected</th>
+                      <th>Luck</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...luckGroups.values()].map((group) => {
+                      const events = group.events.map((entry) => entry.event);
+                      return (
+                        <tr key={`${group.side}:${group.kind}`}>
+                          <th>
+                            {names[group.side]} · {group.kind}
+                          </th>
+                          <td>
+                            {events.filter((event) => event.occurred).length} /{" "}
+                            {events
+                              .reduce(
+                                (sum, event) => sum + event.probability,
+                                0,
+                              )
+                              .toFixed(2)}{" "}
+                            <small>({events.length} checks)</small>
+                          </td>
+                          <td>
+                            {luckLabel(summarizeLuck(events, side).score)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <p>
+                  Actual RNG checks, not changes in win probability. Guaranteed
+                  effects excluded. Positive means luck favored {names[side]}.
+                </p>
                 <div className="luck-split">
                   {rankedMoments.map((group) => (
                     <section key={group.sign}>
                       <h3>{group.title}</h3>
                       {group.moments.length === 0 && (
-                        <p className="note">No recorded swings yet.</p>
+                        <p className="note">
+                          No events at least 1σ from expectation.
+                        </p>
                       )}
                       {group.moments.map((point, rank) => (
                         <button
                           className="luck-event"
-                          key={point.index}
+                          key={`${point.index}:${point.eventIndex}`}
                           onClick={() => review(point.index)}
                         >
                           <span>
                             {rank + 1}. Turn {point.turn} · decision{" "}
                             {point.index + 1}
                             <br />
-                            {eventSummary(point.events || [])}
+                            {point.event.label} ·{" "}
+                            {percent(point.event.probability)} chance
                           </span>
                           <b
                             className={group.sign < 0 ? "negative" : "positive"}
                           >
-                            {points(point.luck!)}
+                            {luckLabel(point.luck)}
                           </b>
                         </button>
                       ))}
@@ -1646,12 +1605,14 @@ function App() {
                 <details className="note">
                   <summary>How grades work</summary>
                   <small>
-                    Review score = 100 × exp(−5 × mean regret). Unobserved
-                    decisions are excluded. Thresholds: Best &lt;0.5 pp;
-                    Excellent &lt;1 pp; Good &lt;2 pp; Inaccuracy &lt;5 pp;
-                    Mistake &lt;12 pp; Blunder ≥12 pp. These are product
-                    conventions, not calibrated skill ratings. Brilliant is a
-                    low-regret sacrifice: ≥50% expected chance of losing a
+                    Review score = 100 × exp(−5 × root-mean-square regret).
+                    Squared losses penalize blunders more than small
+                    inaccuracies. Unobserved decisions are excluded. This is not
+                    Chess.com’s proprietary CAPS2 formula. Thresholds: Best
+                    &lt;0.5 pp; Excellent &lt;1 pp; Good &lt;2 pp; Inaccuracy
+                    &lt;5 pp; Mistake &lt;12 pp; Blunder ≥12 pp. These are
+                    product conventions, not calibrated skill ratings. Brilliant
+                    is a low-regret sacrifice: ≥50% expected chance of losing a
                     Pokémon, ≥5 pp better than every low-sacrifice alternative,
                     and 50–95% expected win value.
                   </small>
@@ -1849,9 +1810,15 @@ function App() {
               displays that specific matchup instead.
             </p>
             <p>
-              <b>Luck-o-meter shows outcome swing.</b> It compares the replay’s
-              successor with the fixed-seed successor for the same played
-              actions. It is not a statistical measure of luck.
+              <b>Luck measures actual RNG checks.</b> Hits, critical hits,
+              secondary effects, full paralysis, thawing and confusion checks
+              use the original simulator’s effective probabilities and recorded
+              RNG. Guaranteed or blocked effects are excluded. The score sums
+              signed (actual − expected) counts and divides by √Σp(1−p).
+              Opponent luck has the opposite sign. This is an event-count score,
+              not win equity or a normal-distribution probability. Damage rolls,
+              speed ties, sleep duration, multi-hit counts and chance-based
+              ability/item activations are not scored.
             </p>
             <p>
               <b>Estimates have limits.</b> A one-step critic is not perfect

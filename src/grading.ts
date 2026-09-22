@@ -40,3 +40,10 @@ export function classifyMoves(
         };
   });
 }
+
+export function accuracy(regrets: number[]): number | null {
+  if (!regrets.length) return null;
+  const meanSquaredRegret =
+    regrets.reduce((sum, regret) => sum + regret * regret, 0) / regrets.length;
+  return 100 * Math.exp(-5 * Math.sqrt(meanSquaredRegret));
+}
