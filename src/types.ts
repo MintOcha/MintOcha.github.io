@@ -77,6 +77,7 @@ export interface Matrix {
   p: number[];
   q: number[];
   value: number;
+  nashValue: number;
   exploitability: number;
   mode: "masked" | "oracle";
   perspective: Side;
