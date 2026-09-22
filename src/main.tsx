@@ -1237,7 +1237,7 @@ function App() {
                         </div>
                         <section className="best-lines" aria-label="Best lines">
                           <h3>Best lines</h3>
-                          <p className="note">Two decisions shown; each is evaluated one turn at a time. Replies shown are the strongest against each selected move.</p>
+                          <p className="note">Each line shows the strongest reply to that move; its percentage evaluates the first action pair. Move grades use the opponent’s Nash mixture instead. Up to two decisions shown, evaluated one turn at a time.</p>
                           {!lines.length && <p role="status">{position?.phase === "ended" ? "Battle ended" : "Finding best lines…"}</p>}
                           {lines.map((line, rank) => (
                             <article key={rank}>

@@ -719,8 +719,8 @@ async function branch(
 }
 async function continuations(index: number, perspective: Side, oracle: boolean) {
   const root = await analyze(index, perspective, oracle, false);
-  const ranked = root.rows.map((_, row) => ({ row, value: root.moveValues[row] }))
-    .sort((a, b) => b.value - a.value).slice(0, 3);
+  const ranked = root.rows.map((_, row) => ({ row, value: Math.min(...root.values[row]) }))
+    .sort((a, b) => b.value - a.value || root.moveValues[b.row] - root.moveValues[a.row]).slice(0, 3);
   const lines: Continuation[] = [];
   for (const candidate of ranked) {
     const steps: Branch[] = [];
