@@ -127,7 +127,6 @@ function ActionButton({
           : action.kind === "switch"
             ? "Switch"
             : "No choice"}
-        {played && <span className="played-label">Played</span>}
         <b>
           {assessment && <GradeIcon assessment={assessment} />}
           {value !== undefined ? percent(value) : ""}
@@ -1131,6 +1130,7 @@ function App() {
                             <>
                               <GradeIcon assessment={assessment} />
                               <span>
+                                {player ? "Opp move: " : "Your move: "}
                                 {action.label}
                                 {action.tera ? " + Tera" : ""} ·{" "}
                                 {assessment.label}
