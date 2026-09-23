@@ -514,7 +514,11 @@ async function analyze(
       cell.count++;
       for (const side of [0, 1] as Side[]) {
         const p1 = (paired[2 * k] + 1 - paired[2 * k + 1]) / 2;
-        cell.values[side] = oracle ? (side === 0 ? p1 : 1 - p1) : paired[2 * k + side];
+        cell.values[side] = oracle
+          ? side === 0
+            ? p1
+            : 1 - p1
+          : paired[2 * k + side];
         if (
           states[k].sides[side].pokemonLeft <
           frame.state.sides[side].pokemonLeft
@@ -723,7 +727,11 @@ async function branch(
   }
   return result;
 }
-async function continuations(index: number, perspective: Side, oracle: boolean) {
+async function continuations(
+  index: number,
+  perspective: Side,
+  oracle: boolean,
+) {
   const root = await analyze(index, perspective, oracle, false);
   const ranked = root.rows.map((_, row) => ({ row, value: Math.min(...root.values[row]) }))
     .sort((a, b) => b.value - a.value || root.moveValues[b.row] - root.moveValues[a.row]).slice(0, 3);
@@ -733,10 +741,17 @@ async function continuations(index: number, perspective: Side, oracle: boolean) 
     let current = index;
     for (let depth = 0; depth < 2; depth++) {
       if (cancelled) throw new Error("Analysis cancelled");
-      const matrix = depth === 0 ? root : await analyze(current, perspective, oracle, false);
+      const matrix =
+        depth === 0 ? root : await analyze(current, perspective, oracle, false);
       const row = depth === 0 ? candidate.row : matrix.best;
       const col = matrix.values[row].indexOf(Math.min(...matrix.values[row]));
-      const next = await branch(current, perspective, oracle, matrix.rows[row].id, matrix.columns[col].id);
+      const next = await branch(
+        current,
+        perspective,
+        oracle,
+        matrix.rows[row].id,
+        matrix.columns[col].id,
+      );
       steps.push(next);
       current = next.view.index;
       if (next.view.phase === "ended") break;
@@ -819,7 +834,11 @@ onmessage = async (event) => {
         true,
       );
     } else if (type === "continuations") {
-      result = await continuations(input.index, input.perspective, input.oracle);
+      result = await continuations(
+        input.index,
+        input.perspective,
+        input.oracle,
+      );
     } else if (type === "branch")
       result = await branch(
         input.index,

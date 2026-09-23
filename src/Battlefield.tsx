@@ -6,6 +6,7 @@ export default function Battlefield({
   side,
   replay,
   playing,
+  oracle,
   onLog,
   onSettled,
 }: {
@@ -13,6 +14,7 @@ export default function Battlefield({
   side: Side;
   replay: string;
   playing: boolean;
+  oracle: boolean;
   onLog: (html: string) => void;
   onSettled: (index: number) => void;
 }) {
@@ -43,13 +45,16 @@ export default function Battlefield({
         type: "render-battle",
         id: replay,
         side,
+        oracle,
         log: position.log,
         index: position.index,
-        teams: position.teams.map((team, player) => player === side ? team : []),
+        teams: position.teams.map((team, player) =>
+          oracle || player === side ? team : [],
+        ),
       },
       location.origin,
     );
-  }, [position, side, replay, ready]);
+  }, [position, side, replay, ready, oracle]);
   useEffect(() => {
     if (ready)
       frame.current?.contentWindow?.postMessage(
@@ -62,7 +67,7 @@ export default function Battlefield({
       <iframe
         ref={frame}
         title="Pokémon Showdown battlefield"
-        src="/showdown/frame.html?v=settled-2"
+        src="/showdown/frame.html?v=visibility-3"
       />
       {error && <p role="alert">Battle renderer: {error}</p>}
     </div>

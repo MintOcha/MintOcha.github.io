@@ -19,7 +19,9 @@ export function classifyMoves(
     (_, i) => sacrifice[i] <= BRILLIANT.maximumSafeSacrificeChance,
   );
   const goodLimit = GRADES.find((entry) => entry.label === "Good")!.below;
-  const onlyGood = values.length > 1 && values.filter((value) => bestValue - value < goodLimit).length === 1;
+  const onlyGood =
+    values.length > 1 &&
+    values.filter((value) => bestValue - value < goodLimit).length === 1;
   return values.map((value, i) => {
     const regret = Math.max(0, bestValue - value);
     const brilliant =
@@ -37,11 +39,16 @@ export function classifyMoves(
           reason: `${(sacrifice[i] * 100).toFixed(1)}% sacrifice rate with ${(value * 100).toFixed(1)}% win value, ${((value - Math.max(...safe)) * 100).toFixed(1)} pp above safer alternatives.`,
         }
       : onlyGood && regret < goodLimit
-        ? { label: "Great", symbol: "!", className: "great", reason: "The only move within the Good-or-better range." }
-      : {
-          ...grade(regret),
-          reason: `${(regret * 100).toFixed(1)} pp below the best available move.`,
-        };
+        ? {
+            label: "Great",
+            symbol: "!",
+            className: "great",
+            reason: "The only move within the Good-or-better range.",
+          }
+        : {
+            ...grade(regret),
+            reason: `${(regret * 100).toFixed(1)} pp below the best available move.`,
+          };
   });
 }
 

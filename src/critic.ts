@@ -44,7 +44,8 @@ export function initializeCritic() {
 }
 
 export async function evaluatePositions(positions: Position[]) {
-  const { python, session } = await initializeCritic();
+  const runtime = await initializeCritic();
+  const { python, session } = runtime;
   const encode = python.globals.get("encode_positions");
   const observation = encode(JSON.stringify(positions));
   encode.destroy();

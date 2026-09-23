@@ -527,8 +527,15 @@ html {
 .luck-events-panel .luck-event {
   text-align: left;
 }
-.best-lines article { border-bottom: 1px solid var(--border); margin-bottom: 0.75em; }
-.best-lines article header { display: flex; justify-content: space-between; padding: 0.4em; }
+.best-lines article {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.75em;
+}
+.best-lines article header {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.4em;
+}
 .action-grid,
 .reply-grid {
   display: flex;
@@ -756,7 +763,9 @@ html {
 .brilliant {
   color: #237b83;
 }
-.great { color: var(--blue); }
+.great {
+  color: var(--blue);
+}
 .best,
 .excellent,
 .good,
