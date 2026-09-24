@@ -1,4 +1,4 @@
-"""Export the existing critic and its exact observation encoder for browser inference."""
+"""Export the Oracle outcome critic and its observation encoder for browser inference."""
 import argparse
 import ast
 import hashlib
@@ -38,10 +38,10 @@ output = root / 'public/model'
 output.mkdir(parents=True, exist_ok=True)
 wrapped = Probability(model).eval()
 example = torch.zeros(2, 13, 139)
-torch.onnx.export(wrapped, example, output / 'critic.onnx', input_names=['observation'],
+torch.onnx.export(wrapped, example, output / 'oracle.onnx', input_names=['observation'],
                   output_names=['probability'], dynamic_axes={'observation': {0: 'batch'}, 'probability': {0: 'batch'}},
                   opset_version=17, dynamo=False)
-session = ort.InferenceSession(str(output / 'critic.onnx'), providers=['CPUExecutionProvider'])
+session = ort.InferenceSession(str(output / 'oracle.onnx'), providers=['CPUExecutionProvider'])
 with torch.inference_mode():
     reference = wrapped(example).numpy()
 actual = session.run(None, {'observation': example.numpy()})[0]
@@ -79,8 +79,6 @@ def encode_positions(payload):
             obs = full[own].copy()
             obs[1 + TEAM:] = full[1 - own][1:1 + TEAM]
             obs[1 + TEAM:, IDX['tok_type'][0]] = 2
-            obs[1 + TEAM:, IDX['is_ours'][0]] = 0
-            obs[0, IDX['opp_alive'][0]] = full[1 - own][0, IDX['our_alive'][0]]
         else:
             obs = observation(pos['messages'], pos['request'], perspective, pos['id'], prefixes)
         encoded.append(obs)
@@ -127,5 +125,5 @@ for name in needed:
         raise ValueError(f'Runtime package checksum mismatch: {name}')
 for file in (root / 'node_modules/onnxruntime-web/dist').glob('ort-wasm-simd-threaded.*'):
     shutil.copy2(file, runtime / file.name)
-(output / 'metadata.json').write_text(json.dumps({'name': 'BCE critic', 'contract': OBSERVATION_CONTRACT, 'shape': [13, 139], 'checkpoint_sha256': hashlib.sha256((root / 'server/best.ckpt').read_bytes()).hexdigest()}))
-print(json.dumps({'onnx_max_error': float(np.max(np.abs(reference-actual))), 'model_bytes': (output / 'critic.onnx').stat().st_size, 'encoder_bytes': (output / 'encoder.zip').stat().st_size, 'pyodide': version}))
+(output / 'oracle.json').write_text(json.dumps({'name': 'Oracle outcome critic', 'contract': 'oracle-both-private-own-blocks-v1', 'shape': [13, 139], 'checkpoint_sha256': hashlib.sha256((root / 'server/best.ckpt').read_bytes()).hexdigest()}))
+print(json.dumps({'onnx_max_error': float(np.max(np.abs(reference-actual))), 'model_bytes': (output / 'oracle.onnx').stat().st_size, 'encoder_bytes': (output / 'encoder.zip').stat().st_size, 'pyodide': version}))

@@ -218,7 +218,7 @@ function App() {
   const [position, setPosition] = useState<PositionView | null>(null);
   const [analysisMatrix, setMatrix] = useState<Matrix | null>(null);
   const [side, setSide] = useState<Side>(0);
-  const oracle = false;
+  const [oracle, setOracle] = useState(false);
   const [positionValue, setPositionValue] = useState<number | null>(null);
   const [battleLog, setBattleLog] = useState("");
   const [playing, setPlaying] = useState(false);
@@ -927,15 +927,18 @@ function App() {
                     <option value={1}>{names[1]}</option>
                   </select>
                 </label>
-                <div>
-                  <label>
-                    <input type="checkbox" checked={oracle} disabled aria-describedby="oracle-unavailable" />{" "}
-                    Oracle · all revealed
-                  </label>
-                  <small id="oracle-unavailable" style={{ display: "block" }}>
-                    Unavailable until Oracle model training is complete.
-                  </small>
-                </div>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={oracle}
+                    onChange={(event) => {
+                      setOracle(event.target.checked);
+                      setTimeline([]);
+                      void review(position?.index ?? 0, side, event.target.checked);
+                    }}
+                  />{" "}
+                  Oracle · all revealed
+                </label>
               </div>
             </section>
             <div className="workspace" ref={workspaceElement}>

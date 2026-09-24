@@ -1,8 +1,8 @@
 import * as ort from "onnxruntime-web/webgpu";
 
-type Position = { id: string; [key: string]: unknown };
+type Position = { id: string; oracle?: unknown; [key: string]: unknown };
 let runtime:
-  | Promise<{ python: any; session: ort.InferenceSession; backend: string }>
+  | Promise<{ python: { globals: { get: (name: string) => (payload: string) => { getBuffer: (type: string) => { data: Float32Array; release: () => void }; destroy: () => void } } }; sessions: Record<"critic" | "oracle", ort.InferenceSession>; backend: string }>
   | undefined;
 
 export function initializeCritic() {
@@ -25,27 +25,31 @@ export function initializeCritic() {
     ort.env.wasm.wasmPaths = base;
     ort.env.wasm.numThreads = 1;
     let backend = "CPU · WebAssembly";
-    let session: ort.InferenceSession | undefined;
-    if ("gpu" in navigator) {
-      try {
-        session = await ort.InferenceSession.create("/model/critic.onnx", {
-          executionProviders: ["webgpu"],
-        });
-        backend = "GPU · WebGPU";
-      } catch (error) {
-        console.warn("WebGPU unavailable; using local CPU inference", error);
+    const sessions = {} as Record<"critic" | "oracle", ort.InferenceSession>;
+    for (const model of ["critic", "oracle"] as const) {
+      let session: ort.InferenceSession | undefined;
+      if ("gpu" in navigator) {
+        try {
+          session = await ort.InferenceSession.create(`/model/${model}.onnx`, {
+            executionProviders: ["webgpu"],
+          });
+          backend = "GPU · WebGPU";
+        } catch (error) {
+          console.warn("WebGPU unavailable; using local CPU inference", error);
+        }
       }
+      session ??= await ort.InferenceSession.create(`/model/${model}.onnx`, {
+        executionProviders: ["wasm"],
+      });
+      sessions[model] = session;
     }
-    session ??= await ort.InferenceSession.create("/model/critic.onnx", {
-      executionProviders: ["wasm"],
-    });
-    return { python, session, backend };
+    return { python, sessions, backend };
   })());
 }
 
 export async function evaluatePositions(positions: Position[]) {
   const runtime = await initializeCritic();
-  const { python, session } = runtime;
+  const { python, sessions } = runtime;
   const encode = python.globals.get("encode_positions");
   const observation = encode(JSON.stringify(positions));
   encode.destroy();
@@ -57,7 +61,10 @@ export async function evaluatePositions(positions: Position[]) {
       139,
     ]);
     try {
-      const outputs = await session.run({ observation: input });
+      const model = positions[0].oracle ? "oracle" : "critic";
+      if (positions.some((position) => Boolean(position.oracle) !== Boolean(positions[0].oracle)))
+        throw new Error("Mixed critic modes in one evaluation batch");
+      const outputs = await sessions[model].run({ observation: input });
       const probability = outputs.probability;
       try {
         return positions.map((position, i) => ({
